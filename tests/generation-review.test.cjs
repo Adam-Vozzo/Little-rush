@@ -69,6 +69,21 @@ function reachable(cells, start, width, height) {
   }
   return seen;
 }
+function routeTo(maze, end = maze.end) {
+  const previous = new Map([[maze.start, null]]), queue = [maze.start];
+  for (let index = 0; index < queue.length; index++) {
+    const cell = queue[index];
+    for (let side = 0; side < 4; side++) {
+      const next = adjacent(cell, side, maze.width, maze.height);
+      if (next < 0 || previous.has(next) || !(maze.cells[cell] & (1 << side)) || !(maze.cells[next] & (1 << ((side + 2) % 4)))) continue;
+      previous.set(next, cell); queue.push(next);
+    }
+  }
+  assert.ok(previous.has(end));
+  const route = [];
+  for (let cell = end; cell !== null; cell = previous.get(cell)) route.unshift(cell);
+  return route;
+}
 function pipeMask(type, rotation) {
   const base = type === 'bend' ? [0, 1] : [1, 3];
   return base.reduce((mask, side) => mask | (1 << ((side + rotation) % 4)), 0);
@@ -85,6 +100,16 @@ function game(type, seed = 0) {
   return { ...controller, container, get completions() { return completions; }, one: selector => container.querySelector(selector), all: selector => container.querySelectorAll(selector) };
 }
 const pointerAt = ([clientX, clientY]) => ({ clientX, clientY });
+function mazeGame(seed) {
+  const maze = puzzles.generateMaze(randomFor(seed));
+  const g = game('maze', seed), grid = g.one('.ex-maze-grid'), cells = g.all('.ex-maze-cell');
+  cells.forEach((cell, index) => {
+    cell.getBoundingClientRect = () => ({ left: 13 + index % maze.width * 20, top: 17 + Math.floor(index / maze.width) * 20, width: 20, height: 20 });
+  });
+  const at = cell => ({ clientX: 13 + (cell % maze.width + .5) * 20, clientY: 17 + (Math.floor(cell / maze.width) + .5) * 20 });
+  const current = () => Number(g.one('.is-player').getAttribute('data-cell'));
+  return { ...g, get completions() { return g.completions; }, maze, grid, cells, at, current };
+}
 function moveSlider(handle, value, { pointerId = 1, release = true } = {}) {
   const initial = Number(handle.getAttribute('aria-valuenow'));
   // Grabbing the right edge of the thumb must preserve this arbitrary offset.
@@ -117,6 +142,107 @@ test('independent review: 1000 generated mazes are reciprocal connected trees wi
     layouts.add(`${maze.start}:${maze.end}:${maze.cells.join(',')}`);
   }
   assert.ok(layouts.size > 900, `Only ${layouts.size} unique mazes`);
+});
+
+test('independent review: 200 generated mazes solve by dragging and display no movement buttons', () => {
+  for (let seed = 0; seed < 200; seed++) {
+    const g = mazeGame(seed), route = routeTo(g.maze);
+    assert.equal(g.all('button').length, 0);
+    assert.equal(g.all('.ex-maze-controls').length, 0);
+    g.grid.fire('pointerdown', g.at(route[0]));
+    assert.equal(g.grid.captured, 1);
+    route.slice(1).forEach(cell => g.grid.fire('pointermove', g.at(cell)));
+    assert.equal(g.current(), g.maze.end, `Drag failed to reach exit for seed ${seed}`);
+    assert.equal(g.completions, 1);
+    assert.equal(g.grid.captured, null);
+    g.destroy();
+  }
+});
+
+test('independent review: fast maze swipes stop at every intervening wall instead of jumping cells', () => {
+  for (let seed = 0; seed < 100; seed++) {
+    for (let side = 0; side < 4; side++) {
+      const g = mazeGame(seed);
+      let expected = g.maze.start;
+      while (true) {
+        const next = adjacent(expected, side, g.maze.width, g.maze.height);
+        if (next < 0 || !(g.maze.cells[expected] & (1 << side)) || !(g.maze.cells[next] & (1 << ((side + 2) % 4)))) break;
+        expected = next;
+        if (expected === g.maze.end) break;
+      }
+      const from = g.at(g.maze.start);
+      g.grid.fire('pointerdown', from);
+      g.grid.fire('pointermove', { clientX: from.clientX + offsets[side][0] * 1000, clientY: from.clientY + offsets[side][1] * 1000 });
+      assert.equal(g.current(), expected, `Wall skipped for seed ${seed}, direction ${side}`);
+      assert.equal(g.grid.captured, null);
+      g.destroy();
+    }
+  }
+});
+
+test('independent review: diagonal corner cuts and re-grabbing another cell cannot teleport the maze dot', () => {
+  for (let seed = 0; seed < 100; seed++) {
+    const g = mazeGame(seed);
+    const x = g.maze.start % g.maze.width, y = Math.floor(g.maze.start / g.maze.width);
+    const diagonal = (y + (y < g.maze.height - 1 ? 1 : -1)) * g.maze.width + x + (x < g.maze.width - 1 ? 1 : -1);
+    g.grid.fire('pointerdown', g.at(diagonal));
+    assert.notEqual(g.grid.captured, 1);
+    assert.equal(g.current(), g.maze.start);
+    g.grid.fire('pointerdown', g.at(g.maze.start));
+    g.grid.fire('pointermove', g.at(diagonal));
+    assert.equal(g.current(), g.maze.start);
+    assert.equal(g.grid.captured, null);
+    g.grid.fire('pointermove', g.at(g.maze.end));
+    assert.equal(g.completions, 0);
+    g.destroy();
+  }
+});
+
+test('independent review: maze cancellation preserves progress and requires the same dot to be grabbed again', () => {
+  for (const cancellation of ['pointercancel', 'lostpointercapture']) {
+    const g = mazeGame(30), route = routeTo(g.maze);
+    g.grid.fire('pointerdown', g.at(route[0]));
+    g.grid.fire('pointermove', g.at(route[1]));
+    g.grid.fire(cancellation);
+    assert.equal(g.current(), route[1]);
+    assert.equal(g.grid.captured, null);
+    g.grid.fire('pointermove', g.at(route[2]));
+    assert.equal(g.current(), route[1]);
+    g.grid.fire('pointerdown', g.at(route[0]));
+    assert.equal(g.grid.captured, null);
+    g.grid.fire('pointerdown', g.at(route[1]));
+    route.slice(2).forEach(cell => g.grid.fire('pointermove', g.at(cell)));
+    assert.equal(g.completions, 1);
+  }
+});
+
+test('independent review: a second finger and keyboard cannot alter an owned maze stroke', () => {
+  const g = mazeGame(45), route = routeTo(g.maze);
+  const firstSide = offsets.findIndex(([dx, dy]) => route[0] % 5 + dx === route[1] % 5 && Math.floor(route[0] / 5) + dy === Math.floor(route[1] / 5));
+  const key = ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'][firstSide];
+  g.grid.fire('pointerdown', g.at(route[0]));
+  g.grid.fire('pointerdown', { ...g.at(route[0]), pointerId: 2 });
+  g.grid.fire('pointermove', { ...g.at(route[1]), pointerId: 2 });
+  g.grid.fire('pointerup', { ...g.at(route[1]), pointerId: 2 });
+  g.grid.fire('pointercancel', { pointerId: 2 });
+  g.grid.fire('keydown', { key });
+  assert.equal(g.current(), route[0]);
+  assert.equal(g.grid.captured, 1);
+  route.slice(1).forEach(cell => g.grid.fire('pointermove', g.at(cell)));
+  assert.equal(g.completions, 1);
+});
+
+test('independent review: maze reads coalesced turns and permits keyboard-only navigation', () => {
+  const g = mazeGame(100), route = routeTo(g.maze);
+  g.grid.fire('pointerdown', g.at(route[0]));
+  g.grid.fire('pointermove', { ...g.at(route.at(-1)), getCoalescedEvents: () => route.slice(1).map(cell => g.at(cell)) });
+  assert.equal(g.completions, 1);
+  const keyboard = mazeGame(100);
+  for (let i = 1; i < route.length; i++) {
+    const side = offsets.findIndex(([dx, dy]) => route[i - 1] % 5 + dx === route[i] % 5 && Math.floor(route[i - 1] / 5) + dy === Math.floor(route[i] / 5));
+    keyboard.grid.fire('keydown', { key: ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'][side] });
+  }
+  assert.equal(keyboard.completions, 1);
 });
 
 test('independent review: 1000 pipe layouts begin unsolved and their intended rotations connect external anchors', () => {

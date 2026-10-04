@@ -10,17 +10,15 @@
 .ex-word span.is-typed { opacity: 1; }
 .ex-mini-keys { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 3px; width: 93%; max-width: 138px; height: 54px; flex-shrink: 1; min-height: 36px; }
 .ex-key:disabled { opacity: .35; }
-.ex-maze-board { width: 100%; display: flex; gap: 8px; align-items: center; justify-content: center; }
-.ex-maze-grid { display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); width: 66px; height: 66px; flex-shrink: 0; padding: 2px; gap: 0; background: #fff8e9d9; border-radius: 3px; border: 1px solid #66657b; }
+.ex-maze-board { width: 100%; height: 100%; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.ex-maze-grid { display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); width: auto; height: 100%; max-width: 100%; aspect-ratio: 1; flex-shrink: 1; padding: 2px; gap: 0; background: #fff8e9d9; border-radius: 3px; border: 1px solid #66657b; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ex-maze-grid:focus-visible { outline: 2px solid #45634e; outline-offset: 2px; }
+.ex-maze-grid.is-dragging, .ex-maze-grid.is-dragging .ex-maze-cell { cursor: grabbing; }
+.ex-maze-cell.is-player { cursor: grab; }
 .ex-maze-cell { display: block; position: relative; border: 1px solid; }
 .ex-maze-cell.is-path { background: #fff8e9d9; }
 .ex-maze-cell.is-exit::before { content: ''; position: absolute; inset: 2px; border: 1px solid #5a7559; background: #bad2ae70; }
 .ex-maze-cell.is-player::after { content: ''; position: absolute; inset: 2px; background: #b96869; border-radius: 50%; z-index: 1; }
-.ex-maze-controls { display: grid; grid-template-columns: repeat(3, 21px); grid-template-rows: repeat(2, 27px); gap: 2px; }
-.ex-maze-controls .ex-up { grid-column: 2; }
-.ex-maze-controls .ex-left { grid-column: 1; grid-row: 2; }
-.ex-maze-controls .ex-down { grid-column: 2; grid-row: 2; }
-.ex-maze-controls .ex-right { grid-column: 3; grid-row: 2; }
 .mg button.ex-sign-paper { width: 95%; max-width: 145px; aspect-ratio: 12 / 7; background: #fffaf0b0; border-radius: 7px; touch-action: none; cursor: crosshair; overflow: hidden; }
 .mg button.ex-sign-paper:active { transform: none; }
 .ex-memory-code { letter-spacing: .2em; padding-left: .2em; font-size: 22px; line-height: 23px; font-weight: 550; font-variant-numeric: tabular-nums; }
@@ -71,9 +69,7 @@
   .ex-word, .ex-memory-code { font-size: 17px; line-height: 19px; }
   .ex-word { gap: 2px; }
   .ex-mini-keys { height: 43px; min-height: 34px; gap: 3px; width: 100%; }
-  .ex-maze-board { gap: 4px; }
-  .ex-maze-grid { width: 48%; height: auto; aspect-ratio: 1; padding: 1px; }
-  .ex-maze-controls { flex: 1; min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, 24px); }
+  .ex-maze-grid { padding: 1px; }
   .ex-maze-cell.is-exit::before { inset: 1px; border-width: 1px; }
   .ex-maze-cell.is-player::after { inset: 1px; }
   .ex-levels { gap: 1px; }

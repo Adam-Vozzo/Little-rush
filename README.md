@@ -46,7 +46,7 @@ Future pushes to `main` update the site automatically. See [GitHub's publishing-
 | WIRES | Trace randomly labelled letter/digit endpoints and cut the requested wire. |
 | ROLL | Rotate the beetle upright. |
 | TYPE | Enter one of 106 nature-themed words using the tile's letter keys. |
-| MAZE | Guide the dot through a newly generated, solvable 5×5 maze to the exit. |
+| MAZE | Grab and drag the dot through the passages of a generated 5×5 maze. Walls block shortcuts; arrow keys are available when the maze has keyboard focus. |
 | SIGN | Trace a newly generated dotted signature in one continuous gesture. |
 | MEMORY | Remember a three-digit code, then enter it after it disappears. |
 | LEVEL | Grab and slide three knobs to randomized target marks. Tapping the track does not move them. |
@@ -75,6 +75,6 @@ Add a pack with `LittleRushGames.register(catalogEntries, mountFunction)`. Each 
 
 Run `npm test` / `node --test tests/*.test.cjs`. Tests cover all 21 games, 2.5-second spawns, 25-second deadline boundaries, full-board handling, queue/unlock logic, pointer ownership, cooldowns, upload states, pause/restart/expiry cleanup, and the integrated hatch-to-feed lifecycle. Independent solvers verify generated puzzles across 1,000 seeds. DOM test doubles verify logic; they do not replace browser checks.
 
-Browser checks covered the real hatch-to-butterfly-to-nectar sequence, shape drops, wire cuts, bounded switch knobs, Level/Catch drag completion and ignored track taps, upload progression, generated maze and pipe solutions, geode reveal, math cooldown, 128px game layouts, and both phone sizes. No physical iOS/Android device testing has been performed.
+Browser checks covered the real hatch-to-butterfly-to-nectar sequence, shape drops, wire cuts, bounded switch knobs, Level/Catch drag completion and ignored track taps, upload progression, generated maze drag completion and blocked wall shortcuts, pipe solutions, geode reveal, math cooldown, 128px game layouts, and both phone sizes. The game also loaded and started with every asset served under a `/Little-rush/` path. No physical iOS/Android device testing has been performed.
 
 For isolated interaction checks, open `/tests/playground.html` from the local server. It exposes the full catalog without run deadlines and lets you inspect 128px and 174px tiles.

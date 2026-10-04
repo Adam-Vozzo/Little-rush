@@ -81,6 +81,12 @@ function traceSignature(paper, checkpoints, pointerId = 1) {
   paper.dispatch('pointerdown', { clientX: checkpoints[0][0], clientY: checkpoints[0][1], pointerId });
   for (const [clientX, clientY] of checkpoints.slice(1)) paper.dispatch('pointermove', { clientX, clientY, pointerId });
 }
+function mazeGeometry(g) {
+  const maze = g.one('.ex-maze-grid'), width = 20, left = 11, top = 17;
+  maze.rect = { left, top, width: 100, height: 100 };
+  g.all('.ex-maze-cell').forEach((cell, index) => { cell.rect = { left: left + index % 5 * width, top: top + Math.floor(index / 5) * width, width, height: width }; });
+  return { maze, center: index => ({ clientX: left + (index % 5 + .5) * width, clientY: top + (Math.floor(index / 5) + .5) * width }) };
+}
 
 test('all ten extensions register, mount, and remain inert in demo mode', () => {
   assert.equal(catalog.length, 10); assert.equal(new Set(catalog.map(item => item.id)).size, 10);
@@ -100,23 +106,82 @@ test('type rejects a wrong character and accepts the displayed word', () => {
   const g = game('type'); g.label('Type U').click(); assert.equal(g.completions, 0); assert.equal(g.feedback[0], 'error');
   ['B', 'U', 'D'].forEach(letter => g.label(`Type ${letter}`).click()); completedOnce(g);
 });
-test('generated mazes have varied walls and endpoints and every mounted maze is playable', () => {
+test('generated mazes have varied walls and every mounted maze completes by continuously dragging the dot', () => {
   const layouts = new Set(), endpoints = new Set();
   for (let seed = 1; seed <= 80; seed++) {
     const puzzle = puzzles.generateMaze(seeded(seed)); const g = game('maze', { random: seeded(seed) });
     layouts.add(puzzle.cells.join(',')); endpoints.add(`${puzzle.start},${puzzle.end}`);
     const route = puzzles.solveMaze(puzzle); assert.ok(route.length >= 8);
-    const names = ['up', 'right', 'down', 'left'];
-    const wall = [0, 1, 2, 3].find(side => !(puzzle.cells[puzzle.start] & 1 << side));
-    g.label(`Move ${names[wall]}`).click(); assert.equal(g.feedback[0], 'error');
-    assert.equal(g.one('.is-player').getAttribute('data-cell'), String(puzzle.start));
-    for (let i = 1; i < route.length; i++) {
-      const diff = route[i] - route[i - 1];
-      g.label(`Move ${diff === 1 ? 'right' : diff === -1 ? 'left' : diff === 5 ? 'down' : 'up'}`).click();
-    }
-    completedOnce(g);
+    const { maze, center } = mazeGeometry(g);
+    assert.equal(g.all('button').length, 0); assert.equal(g.all('.ex-maze-controls').length, 0);
+    assert.equal(maze.tabIndex, 0); assert.match(maze.getAttribute('aria-label'), /drag.*arrow keys/i);
+    maze.dispatch('pointerdown', center(route[0]));
+    for (const cell of route.slice(1)) maze.dispatch('pointermove', center(cell));
+    assert.equal(maze.captured, null); completedOnce(g);
   }
   assert.ok(layouts.size > 70); assert.ok(endpoints.size > 15);
+});
+test('maze checks every crossed passage during a fast straight swipe and stops before walls', () => {
+  const g = game('maze'); const { maze, center } = mazeGeometry(g);
+  maze.dispatch('pointerdown', center(0)); maze.dispatch('pointermove', center(4));
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '4');
+  // The entire eastward corridor is open, but the outer east wall remains closed.
+  maze.dispatch('pointermove', { ...center(4), clientX: center(4).clientX + 80 });
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '4'); assert.equal(maze.captured, null);
+  assert.equal(g.completions, 0); assert.equal(g.feedback.at(-1), 'error');
+  maze.dispatch('pointerdown', center(4)); maze.dispatch('pointerup', center(24));
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '24'); assert.equal(maze.captured, null);
+});
+test('maze cannot jump through walls or cut diagonally across cell corners', () => {
+  const g = game('maze'); const { maze, center } = mazeGeometry(g);
+  maze.dispatch('pointerdown', center(10)); assert.equal(maze.captured, undefined);
+  maze.dispatch('pointerdown', center(0)); maze.dispatch('pointermove', center(10));
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '0'); assert.equal(maze.captured, null);
+  maze.dispatch('pointerdown', center(0)); maze.dispatch('pointermove', center(6));
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '0'); assert.equal(maze.captured, null);
+  // A right-then-down route exists in this toy maze, but its corner is not a passage.
+  const corner = { width: 2, height: 2, cells: [2, 12, 0, 1] };
+  const trace = puzzles.traceMazeSegment(corner, 0, [.5, .5], [1.5, 1.5]);
+  assert.equal(trace.blocked, true); assert.equal(trace.cell, 0); assert.equal(trace.visited.length, 0);
+  // Check the intermediate wall even when both sampled positions are several cells apart.
+  const corridor = { width: 5, height: 1, cells: [2, 8, 2, 10, 8] };
+  const skippedWall = puzzles.traceMazeSegment(corridor, 0, [.5, .5], [4.5, .5]);
+  assert.equal(skippedWall.blocked, true); assert.equal(skippedWall.cell, 1);
+  assert.deepEqual(Array.from(skippedWall.visited), [1]);
+});
+test('maze processes coalesced bend samples instead of cutting across a turn', () => {
+  const g = game('maze'); const { maze, center } = mazeGeometry(g);
+  maze.dispatch('pointerdown', center(0));
+  maze.dispatch('pointermove', { ...center(9), getCoalescedEvents: () => [center(1), center(2), center(3), center(4)] });
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '9'); assert.equal(maze.captured, 1);
+});
+test('maze keeps one pointer owner, preserves valid progress on cancel, and requires re-grabbing the dot', () => {
+  for (const cancellation of ['pointercancel', 'lostpointercapture']) {
+    const g = game('maze'); const { maze, center } = mazeGeometry(g);
+    maze.dispatch('pointerdown', { ...center(0), pointerId: 7 });
+    maze.dispatch('pointerdown', { ...center(0), pointerId: 8 });
+    maze.dispatch('pointermove', { ...center(4), pointerId: 8 }); maze.dispatch('pointerup', { ...center(4), pointerId: 8 });
+    maze.dispatch('keydown', { key: 'ArrowRight' }); assert.equal(g.one('.is-player').getAttribute('data-cell'), '0');
+    assert.equal(maze.captured, 7);
+    maze.dispatch('pointermove', { ...center(1), pointerId: 7 });
+    maze.dispatch(cancellation, { pointerId: 8 }); assert.equal(maze.captured, 7);
+    maze.dispatch(cancellation, { pointerId: 7 }); assert.equal(maze.captured, null);
+    maze.dispatch('pointermove', { ...center(4), pointerId: 7 }); assert.equal(g.one('.is-player').getAttribute('data-cell'), '1');
+    maze.dispatch('pointerdown', center(0)); assert.equal(maze.captured, null);
+    maze.dispatch('pointerdown', center(1)); maze.dispatch('pointermove', center(4)); assert.equal(g.one('.is-player').getAttribute('data-cell'), '4');
+    g.destroy(); assert.equal(maze.captured, null); assert.equal(g.container.children.length, 0);
+    maze.dispatch('pointermove', center(24)); assert.equal(g.completions, 0);
+  }
+});
+test('maze keeps keyboard arrow movement accessible while exposing no movement buttons', () => {
+  const g = game('maze'); const maze = g.one('.ex-maze-grid');
+  maze.dispatch('keydown', { key: 'ArrowDown' }); assert.equal(g.feedback.at(-1), 'error');
+  const route = puzzles.solveMaze(puzzles.generateMaze(() => 0));
+  for (let i = 1; i < route.length; i++) {
+    const diff = route[i] - route[i - 1];
+    maze.dispatch('keydown', { key: diff === 1 ? 'ArrowRight' : diff === -1 ? 'ArrowLeft' : diff === 5 ? 'ArrowDown' : 'ArrowUp' });
+  }
+  completedOnce(g);
 });
 test('signatures vary and every generated guide accepts a continuous trace', () => {
   const signatures = new Set();

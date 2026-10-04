@@ -60,6 +60,34 @@
     return puzzle;
   }
 
+  // Traverse each grid boundary along a pointer segment. Testing only its endpoint
+  // would let a fast swipe cross intervening walls or cut diagonally through corners.
+  function traceMazeSegment(puzzle, start, from, to) {
+    let current = start;
+    const visited = [], dx = to[0] - from[0], dy = to[1] - from[1], epsilon = 1e-7;
+    const result = blocked => ({ cell: current, visited, blocked });
+    if (![...from, ...to].every(Number.isFinite)) return result(true);
+    const startX = start % puzzle.width, startY = Math.floor(start / puzzle.width);
+    if (from[0] < startX - epsilon || from[0] > startX + 1 + epsilon || from[1] < startY - epsilon || from[1] > startY + 1 + epsilon) return result(true);
+    for (let crossing = 0; crossing < puzzle.width + puzzle.height + 2; crossing++) {
+      const x = current % puzzle.width, y = Math.floor(current / puzzle.width);
+      const tx = dx > 0 ? (x + 1 - from[0]) / dx : dx < 0 ? (x - from[0]) / dx : Infinity;
+      const ty = dy > 0 ? (y + 1 - from[1]) / dy : dy < 0 ? (y - from[1]) / dy : Infinity;
+      const t = Math.min(tx, ty);
+      if (t > 1 + epsilon) return result(false);
+      if (Math.abs(tx - ty) < epsilon || t < -epsilon) return result(true);
+      const side = tx < ty ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
+      const along = tx < ty ? from[1] + dy * t : from[0] + dx * t;
+      const fraction = along - Math.floor(along);
+      // Leave a little clearance for the visible dot around wall intersections.
+      if (fraction < .13 || fraction > .87) return result(true);
+      const next = neighbor(current, side, puzzle.width, puzzle.height);
+      if (next < 0 || !(puzzle.cells[current] & 1 << side) || !(puzzle.cells[next] & 1 << opposite(side))) return result(true);
+      current = next; visited.push(current);
+    }
+    return result(true);
+  }
+
   const rotateMask = (mask, turns) => {
     const rotation = ((turns % 4) + 4) % 4;
     return ((mask << rotation) | (mask >> (4 - rotation))) & 15;
@@ -129,7 +157,7 @@
     });
   }
 
-  window.LittleRushPuzzles = { words, generateMaze, solveMaze, generatePipes, pipesConnected, rotateMask, generateSignature, generateLevels };
+  window.LittleRushPuzzles = { words, generateMaze, solveMaze, traceMazeSegment, generatePipes, pipesConnected, rotateMask, generateSignature, generateLevels };
 
   function mount(container, type, options = {}) {
     const { demo = false, random = Math.random, onComplete = () => {}, onFeedback = () => {} } = options;
@@ -286,7 +314,7 @@
       hint.textContent = 'Type the word';
     } else if (type === 'maze') {
       const puzzle = generateMaze(random);
-      let current = puzzle.start;
+      let current = puzzle.start, pointer = null, previousPoint = null, geometry = null;
       const board = node('div', 'ex-maze-board');
       const maze = node('div', 'ex-maze-grid');
       const cells = [];
@@ -297,23 +325,65 @@
         cells.push(cell); maze.append(cell);
       });
       cells[current].classList.add('is-player');
-      maze.setAttribute('aria-label', 'Maze. Guide the pink dot through open passages to the green square.');
-      const controls = node('div', 'ex-maze-controls');
+      maze.tabIndex = demo ? -1 : 0;
+      maze.setAttribute('role', 'group');
+      maze.setAttribute('aria-label', 'Maze. Grab the pink dot and drag through open passages to the green square. Keyboard: use arrow keys.');
+      const updatePosition = next => {
+        cells[current].classList.remove('is-player'); current = next; cells[current].classList.add('is-player');
+        maze.setAttribute('aria-description', `Dot at row ${Math.floor(current / puzzle.width) + 1}, column ${current % puzzle.width + 1}. Goal at row ${Math.floor(puzzle.end / puzzle.width) + 1}, column ${puzzle.end % puzzle.width + 1}.`);
+      };
+      updatePosition(current);
       const move = side => {
         const next = neighbor(current, side, puzzle.width, puzzle.height);
-        if (next < 0 || !(puzzle.cells[current] & 1 << side)) return error();
-        cells[current].classList.remove('is-player'); current = next; cells[current].classList.add('is-player');
+        if (next < 0 || !(puzzle.cells[current] & 1 << side) || !(puzzle.cells[next] & 1 << opposite(side))) return error();
+        updatePosition(next);
         feedback();
         if (current === puzzle.end) finish();
       };
-      [['up', '↑', 0], ['left', '←', 3], ['down', '↓', 2], ['right', '→', 1]].forEach(([direction, symbol, side]) => controls.append(button(`ex-key ex-${direction}`, `Move ${direction}`, symbol, () => move(side))));
-      listen(root, 'keydown', event => {
-        const keys = { ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3 };
-        if (Object.hasOwn(keys, event.key)) { event.preventDefault(); move(keys[event.key]); }
+      const stopDrag = () => {
+        pointer = null; previousPoint = null; geometry = null;
+        maze.classList.remove('is-dragging'); release(maze);
+      };
+      const point = event => [(event.clientX - geometry.left) / geometry.width * puzzle.width, (event.clientY - geometry.top) / geometry.height * puzzle.height];
+      const drag = event => {
+        const nextPoint = point(event), traced = traceMazeSegment(puzzle, current, previousPoint, nextPoint);
+        for (const cell of traced.visited) {
+          updatePosition(cell);
+          if (current === puzzle.end) { stopDrag(); feedback(); finish(); return; }
+        }
+        if (traced.blocked) { stopDrag(); hint.textContent = 'Wall · grab the dot again'; error(); return; }
+        previousPoint = nextPoint;
+      };
+      listen(maze, 'pointerdown', event => {
+        if (pointer !== null || event.button > 0) return;
+        const first = cells[0].getBoundingClientRect(), last = cells[cells.length - 1].getBoundingClientRect();
+        geometry = { left: first.left, top: first.top, width: last.left + last.width - first.left, height: last.top + last.height - first.top };
+        const start = point(event);
+        if (Math.floor(start[0]) !== current % puzzle.width || Math.floor(start[1]) !== Math.floor(current / puzzle.width)) { geometry = null; return; }
+        event.preventDefault(); pointer = event.pointerId; previousPoint = start;
+        hint.textContent = 'Drag the dot to □'; maze.classList.add('is-dragging'); capture(maze, event);
       });
-      board.append(maze, controls);
+      listen(maze, 'pointermove', event => {
+        if (event.pointerId !== pointer) return;
+        event.preventDefault();
+        const samples = event.getCoalescedEvents?.() ?? [];
+        for (const sample of samples) { if (pointer === null) return; drag(sample); }
+        if (pointer !== null) drag(event);
+      });
+      listen(maze, 'pointerup', event => {
+        if (event.pointerId !== pointer) return;
+        if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) drag(event);
+        if (pointer !== null) stopDrag();
+      });
+      const cancelDrag = event => { if (event.pointerId === pointer) stopDrag(); };
+      listen(maze, 'pointercancel', cancelDrag); listen(maze, 'lostpointercapture', cancelDrag);
+      listen(maze, 'keydown', event => {
+        const keys = { ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3 };
+        if (Object.hasOwn(keys, event.key)) { event.preventDefault(); if (pointer === null) move(keys[event.key]); }
+      });
+      board.append(maze);
       body.append(board);
-      hint.textContent = 'Guide the dot to □';
+      hint.textContent = 'Drag the dot to □';
     } else if (type === 'sign') {
       const checkpoints = generateSignature(random);
       const path = values => values.map(([x, y], index) => `${index ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
