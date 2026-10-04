@@ -2,16 +2,16 @@
   'use strict';
 
   const catalog = [
-    { id: 'press', title: 'HATCH', color: 'peach', once: true },
-    { id: 'break', title: 'BREAK', color: 'blue' },
+    { id: 'press', title: 'WAIT & HATCH', color: 'peach', once: true },
+    { id: 'break', title: 'CRACK IT', color: 'peach' },
     { id: 'operation', title: 'SOLVE', color: 'butter' },
-    { id: 'sequence', title: 'ORDER', color: 'lavender' },
-    { id: 'switch', title: 'SWITCH', color: 'sage' },
+    { id: 'sequence', title: 'TAP IN ORDER', color: 'butter' },
+    { id: 'switch', title: 'TURN ON', color: 'blue' },
     { id: 'simon', title: 'REPEAT', color: 'lavender' },
-    { id: 'stop', title: 'STOP', color: 'blue' },
+    { id: 'stop', title: 'STOP IN THE GREEN', color: 'sage' },
     { id: 'hold', title: 'HOLD', color: 'sage' },
-    { id: 'shapes', title: 'MATCH', color: 'butter' },
-    { id: 'wires', title: 'WIRES', color: 'peach' },
+    { id: 'shapes', title: 'MATCH SHAPES', color: 'blue' },
+    { id: 'wires', title: 'CUT THE WIRE', color: 'blue' },
   ];
   const extensions = new Map();
   function register(entries, mounter) {
@@ -119,13 +119,13 @@
         hint.textContent = 'A little butterfly!';
         finish({ kind: 'hatch' });
       });
-      tap.innerHTML = svg(caterpillar);
+      tap.innerHTML = svg(caterpillar, '4 13 93 80');
       body.append(tap);
       hint.textContent = 'Wait for the chrysalis';
       tickers.push(() => {
         if (age < 3000 || ready) return;
         ready = true;
-        tap.innerHTML = svg(chrysalis);
+        tap.innerHTML = svg(chrysalis, '4 13 93 80');
         tap.classList.add('is-ready');
         tap.setAttribute('aria-label', 'Tap the chrysalis to release a butterfly');
         hint.textContent = 'Ready! Tap to hatch';
@@ -186,15 +186,24 @@
       const answers = node('div', 'mg-answers');
       const choices = shuffle([answer, answer + integer(1, 3), Math.max(0, answer - integer(1, 3))]);
       const answerButtons = [];
+      const cooldown = node('span', 'mg-cooldown');
+      cooldown.setAttribute('aria-hidden', 'true');
+      cooldown.hidden = true;
       let cooldownUntil = 0;
       const updateCooldown = () => {
         if (!cooldownUntil) return;
         const remaining = Math.max(0, cooldownUntil - age);
-        if (remaining) hint.textContent = `Try again in ${(Math.ceil(remaining / 100) / 10).toFixed(1)}s`;
+        if (remaining) {
+          const seconds = `${(Math.ceil(remaining / 100) / 10).toFixed(1)}s`;
+          hint.textContent = `Try again in ${seconds}`;
+          cooldown.textContent = seconds;
+          cooldown.hidden = false;
+        }
         else {
           cooldownUntil = 0;
           answerButtons.forEach(choice => { choice.disabled = false; });
           root.classList.remove('is-cooling');
+          cooldown.hidden = true;
           hint.textContent = 'Choose the answer';
         }
       };
@@ -217,6 +226,7 @@
         answerButtons.push(choice);
         answers.append(choice);
       });
+      answers.append(cooldown);
       body.append(equation, answers);
       hint.textContent = 'Choose the answer';
       tickers.push(updateCooldown);
@@ -305,6 +315,7 @@
         pads.forEach((pad, index) => pad.classList.toggle('is-lit', watching ? flash === index : age < tapUntil && tapped === index));
       });
     } else if (type === 'stop') {
+      const meterArea = node('div', 'mg-stop-top');
       const meter = node('div', 'mg-stop-meter');
       meter.innerHTML = '<span class="mg-stop-zone"></span><span class="mg-stop-dot"></span>';
       const movingDot = meter.querySelector('.mg-stop-dot');
@@ -315,8 +326,9 @@
           finish();
         } else error();
       });
-      stop.innerHTML = '<span aria-hidden="true">■</span> stop';
-      body.append(meter, stop);
+      stop.innerHTML = '<span class="mg-stop-symbol" aria-hidden="true">■</span>';
+      meterArea.append(meter);
+      body.append(meterArea, stop);
       hint.textContent = 'Stop inside the green';
       movingDot.style.left = `${position}%`;
       tickers.push(() => {
@@ -420,7 +432,7 @@
       names.forEach(name => {
         const target = { name };
         target.element = button('mg-shape-slot', `Place in ${name} slot`, () => place(target));
-        target.element.innerHTML = svg(shapePaths[name]);
+        target.element.innerHTML = svg(shapePaths[name], '10 8 80 80');
         targets.push(target);
         slots.append(target.element);
       });
@@ -432,7 +444,7 @@
           pick(item);
         });
         item.element = shape;
-        shape.innerHTML = svg(shapePaths[name]);
+        shape.innerHTML = svg(shapePaths[name], '10 8 80 80');
         listen(shape, 'pointerdown', event => {
           if (drag || shape.disabled || (event.pointerType === 'mouse' && event.button !== 0)) return;
           event.preventDefault();
@@ -475,7 +487,8 @@
       if (order.every((value, index) => value === index)) [order[0], order[2]] = [order[2], order[0]];
       const requested = demo ? 1 : integer(0, 2);
       const instruction = `Cut wire ${letters[requested]}–${digits[order[requested]]}`;
-      const prompt = node('div', 'mg-wire-prompt', instruction);
+      const prompt = node('div', 'mg-wire-prompt', `${letters[requested]}–${digits[order[requested]]}`);
+      prompt.setAttribute('aria-label', instruction);
       letters.forEach((letter, index) => {
         const wire = button(`mg-cut-wire mg-wire-color-${index}`, `Cut wire ${letter}–${digits[order[index]]}`, () => {
           if (index !== requested) {
@@ -491,7 +504,7 @@
         const from = 16 + index * 31;
         const to = 16 + order[index] * 31;
         const path = `M21 ${from} C53 ${from} 77 ${to} 109 ${to}`;
-        wire.innerHTML = svg(`<path class="mg-wire-hit" d="${path}" stroke="transparent" stroke-width="17"/><path class="mg-wire-stroke" d="${path}" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><rect class="mg-wire-terminal" x="1" y="${from - 13}" width="24" height="26" rx="5" fill="#fff9ec"/><rect class="mg-wire-terminal" x="105" y="${to - 13}" width="24" height="26" rx="5" fill="#fff9ec"/><text x="13" y="${from + 5}" text-anchor="middle" fill="currentColor">${letter}</text><text x="117" y="${to + 5}" text-anchor="middle" fill="currentColor">${digits[order[index]]}</text>`, '0 0 130 94');
+        wire.innerHTML = svg(`<path class="mg-wire-hit" d="${path}" stroke="transparent" stroke-width="22"/><path class="mg-wire-stroke" d="${path}" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><rect class="mg-wire-terminal" x="0" y="${from - 15}" width="27" height="30" rx="5" fill="#fff9ec"/><rect class="mg-wire-terminal" x="103" y="${to - 15}" width="27" height="30" rx="5" fill="#fff9ec"/><text x="13" y="${from + 5}" text-anchor="middle" fill="currentColor">${letter}</text><text x="117" y="${to + 5}" text-anchor="middle" fill="currentColor">${digits[order[index]]}</text>`, '0 0 130 94');
         circuit.append(wire);
       });
       body.append(prompt, circuit);

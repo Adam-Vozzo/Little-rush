@@ -114,7 +114,7 @@
   }
   window.LittleRushButterfly = {Habitat};
 
-  window.LittleRushGames.register([{id:'feed', title:'FEED', color:'peach'}], (container, type, options = {}) => {
+  window.LittleRushGames.register([{id:'feed', title:'FEED BUTTERFLY', color:'peach'}], (container, type, options = {}) => {
     const {demo = false, onComplete = () => {}, onFeedback = () => {}, butterfly} = options;
     const root = document.createElement('div');
     root.className = 'mg mg-feed';

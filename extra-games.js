@@ -2,16 +2,16 @@
   'use strict';
 
   const catalog = [
-    { id: 'roll', title: 'ROLL', color: 'sage' },
-    { id: 'type', title: 'TYPE', color: 'peach' },
-    { id: 'maze', title: 'MAZE', color: 'lavender' },
-    { id: 'sign', title: 'SIGN', color: 'butter' },
-    { id: 'memory', title: 'MEMORY', color: 'lavender' },
-    { id: 'level', title: 'LEVEL', color: 'blue' },
-    { id: 'catch', title: 'CATCH', color: 'sage' },
+    { id: 'roll', title: 'TURN UPRIGHT', color: 'sage' },
+    { id: 'type', title: 'TYPE THE WORD', color: 'lavender' },
+    { id: 'maze', title: 'DRAG TO EXIT', color: 'blue' },
+    { id: 'sign', title: 'SIGN HERE', color: 'sage' },
+    { id: 'memory', title: 'REMEMBER', color: 'lavender' },
+    { id: 'level', title: 'SLIDE TO MARKS', color: 'blue' },
+    { id: 'catch', title: 'CATCH IT', color: 'sage' },
     { id: 'upload', title: 'UPLOAD', color: 'peach' },
-    { id: 'connect', title: 'CONNECT', color: 'blue' },
-    { id: 'dice', title: 'DICE', color: 'butter' },
+    { id: 'connect', title: 'JOIN PIPES', color: 'blue' },
+    { id: 'dice', title: 'TAP LOW TO HIGH', color: 'butter' },
   ];
   const svg = (content, viewBox = '0 0 100 100') => `<svg viewBox="${viewBox}" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${content}</svg>`;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -65,7 +65,13 @@
   function traceMazeSegment(puzzle, start, from, to) {
     let current = start;
     const visited = [], dx = to[0] - from[0], dy = to[1] - from[1], epsilon = 1e-7;
-    const result = blocked => ({ cell: current, visited, blocked });
+    const entries = [];
+    let lastBoundary = 0;
+    const result = (blocked, point = from) => ({ cell: current, visited, entries, blocked, point: [...point] });
+    const beforeBoundary = t => {
+      const safeT = Math.max(lastBoundary, t - .003 / Math.max(Math.abs(dx), Math.abs(dy), 1));
+      return [from[0] + dx * safeT, from[1] + dy * safeT];
+    };
     if (![...from, ...to].every(Number.isFinite)) return result(true);
     const startX = start % puzzle.width, startY = Math.floor(start / puzzle.width);
     if (from[0] < startX - epsilon || from[0] > startX + 1 + epsilon || from[1] < startY - epsilon || from[1] > startY + 1 + epsilon) return result(true);
@@ -74,16 +80,18 @@
       const tx = dx > 0 ? (x + 1 - from[0]) / dx : dx < 0 ? (x - from[0]) / dx : Infinity;
       const ty = dy > 0 ? (y + 1 - from[1]) / dy : dy < 0 ? (y - from[1]) / dy : Infinity;
       const t = Math.min(tx, ty);
-      if (t > 1 + epsilon) return result(false);
-      if (Math.abs(tx - ty) < epsilon || t < -epsilon) return result(true);
+      if (t > 1 + epsilon) return result(false, to);
+      if (Math.abs(tx - ty) < epsilon || t < -epsilon) return result(true, beforeBoundary(Math.max(0, t)));
       const side = tx < ty ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
       const along = tx < ty ? from[1] + dy * t : from[0] + dx * t;
       const fraction = along - Math.floor(along);
       // Leave a little clearance for the visible dot around wall intersections.
-      if (fraction < .13 || fraction > .87) return result(true);
+      if (fraction < .13 || fraction > .87) return result(true, beforeBoundary(t));
       const next = neighbor(current, side, puzzle.width, puzzle.height);
-      if (next < 0 || !(puzzle.cells[current] & 1 << side) || !(puzzle.cells[next] & 1 << opposite(side))) return result(true);
+      if (next < 0 || !(puzzle.cells[current] & 1 << side) || !(puzzle.cells[next] & 1 << opposite(side))) return result(true, beforeBoundary(t));
       current = next; visited.push(current);
+      entries.push({ cell: current, point: [from[0] + dx * t, from[1] + dy * t] });
+      lastBoundary = t;
     }
     return result(true);
   }
@@ -139,16 +147,6 @@
     return puzzle;
   }
 
-  function generateSignature(random = Math.random) {
-    const count = pick(random, [5, 6]), shape = Math.floor(random() * 3), flip = random() < .5;
-    return Array.from({ length: count }, (_, i) => {
-      const x = i === 0 ? 10 : i === count - 1 ? 110 : 10 + i * 100 / (count - 1) + Math.round(random() * 4 - 2);
-      const phase = shape === 0 ? i % 2 : shape === 1 ? (i % 3 === 1 ? 1 : 0) : (i < count / 2 ? 1 : 0);
-      const y = 28 + (flip ? 1 - phase : phase) * 24 + Math.floor(random() * 7);
-      return [Math.round(x), y];
-    });
-  }
-
   function generateLevels(random = Math.random, count = 3, minInitial = 0, maxInitial = 100) {
     return Array.from({ length: count }, () => {
       const target = 20 + Math.floor(random() * 61);
@@ -157,7 +155,7 @@
     });
   }
 
-  window.LittleRushPuzzles = { words, generateMaze, solveMaze, traceMazeSegment, generatePipes, pipesConnected, rotateMask, generateSignature, generateLevels };
+  window.LittleRushPuzzles = { words, generateMaze, solveMaze, traceMazeSegment, generatePipes, pipesConnected, rotateMask, generateLevels };
 
   function mount(container, type, options = {}) {
     const { demo = false, random = Math.random, onComplete = () => {}, onFeedback = () => {} } = options;
@@ -282,8 +280,11 @@
         feedback();
         if ((rotation % 360 + 360) % 360 === 0) finish();
       };
-      const left = button('ex-round', 'Roll left', '↶', () => rotate(-1));
-      const right = button('ex-round', 'Roll right', '↷', () => rotate(1));
+      const left = button('ex-round', 'Roll left', undefined, () => rotate(-1));
+      const right = button('ex-round', 'Roll right', undefined, () => rotate(1));
+      const arrow = '<path d="M3 10h5M3 10V5M3 10a9 9 0 1 1 .5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+      left.innerHTML = svg(arrow, '0 0 24 24');
+      right.innerHTML = svg(`<g transform="translate(24 0) scale(-1 1)">${arrow}</g>`, '0 0 24 24');
       beetle.style.transform = `rotate(${rotation}deg)`;
       board.append(left, beetle, right);
       body.append(board);
@@ -314,7 +315,9 @@
       hint.textContent = 'Type the word';
     } else if (type === 'maze') {
       const puzzle = generateMaze(random);
-      let current = puzzle.start, pointer = null, previousPoint = null, geometry = null;
+      let current = puzzle.start, pointer = null, geometry = null, grabOffset = [0, 0], wallContact = false;
+      let dotPoint = [current % puzzle.width + .5, Math.floor(current / puzzle.width) + .5];
+      const trail = [[...dotPoint]];
       const board = node('div', 'ex-maze-board');
       const maze = node('div', 'ex-maze-grid');
       const cells = [];
@@ -324,6 +327,18 @@
         cell.setAttribute('data-cell', String(index));
         cells.push(cell); maze.append(cell);
       });
+      const overlay = node('div', 'ex-maze-overlay');
+      overlay.innerHTML = '<svg viewBox="0 0 5 5" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path class="ex-maze-ink" stroke="#b96869" stroke-width=".075" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/><circle class="ex-maze-dot" r=".17" fill="#b96869"/></svg>';
+      const mazeInk = overlay.querySelector('.ex-maze-ink'), mazeDot = overlay.querySelector('.ex-maze-dot');
+      maze.append(overlay);
+      const paintDot = point => {
+        const previous = trail[trail.length - 1];
+        dotPoint = [...point];
+        if (Math.hypot(point[0] - previous[0], point[1] - previous[1]) > .008) trail.push([...point]);
+        mazeDot.setAttribute('cx', String(dotPoint[0])); mazeDot.setAttribute('cy', String(dotPoint[1]));
+        mazeInk.setAttribute('d', trail.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(3)} ${y.toFixed(3)}`).join(' '));
+      };
+      paintDot(dotPoint);
       cells[current].classList.add('is-player');
       maze.tabIndex = demo ? -1 : 0;
       maze.setAttribute('role', 'group');
@@ -337,30 +352,38 @@
         const next = neighbor(current, side, puzzle.width, puzzle.height);
         if (next < 0 || !(puzzle.cells[current] & 1 << side) || !(puzzle.cells[next] & 1 << opposite(side))) return error();
         updatePosition(next);
+        paintDot([current % puzzle.width + .5, Math.floor(current / puzzle.width) + .5]);
         feedback();
         if (current === puzzle.end) finish();
       };
       const stopDrag = () => {
-        pointer = null; previousPoint = null; geometry = null;
+        pointer = null; geometry = null; wallContact = false;
         maze.classList.remove('is-dragging'); release(maze);
       };
       const point = event => [(event.clientX - geometry.left) / geometry.width * puzzle.width, (event.clientY - geometry.top) / geometry.height * puzzle.height];
       const drag = event => {
-        const nextPoint = point(event), traced = traceMazeSegment(puzzle, current, previousPoint, nextPoint);
+        const raw = point(event), nextPoint = [raw[0] + grabOffset[0], raw[1] + grabOffset[1]];
+        const traced = traceMazeSegment(puzzle, current, dotPoint, nextPoint);
         for (const cell of traced.visited) {
           updatePosition(cell);
-          if (current === puzzle.end) { stopDrag(); feedback(); finish(); return; }
+          if (current === puzzle.end) {
+            paintDot(traced.cell === current ? traced.point : traced.entries.find(entry => entry.cell === current).point);
+            stopDrag(); feedback(); finish(); return;
+          }
         }
-        if (traced.blocked) { stopDrag(); hint.textContent = 'Wall · grab the dot again'; error(); return; }
-        previousPoint = nextPoint;
+        paintDot(traced.point);
+        if (traced.blocked) {
+          if (!wallContact) error();
+          wallContact = true; hint.textContent = 'Keep drawing along an open passage';
+        } else { wallContact = false; hint.textContent = 'Drag the dot to □'; }
       };
       listen(maze, 'pointerdown', event => {
         if (pointer !== null || event.button > 0) return;
         const first = cells[0].getBoundingClientRect(), last = cells[cells.length - 1].getBoundingClientRect();
         geometry = { left: first.left, top: first.top, width: last.left + last.width - first.left, height: last.top + last.height - first.top };
         const start = point(event);
-        if (Math.floor(start[0]) !== current % puzzle.width || Math.floor(start[1]) !== Math.floor(current / puzzle.width)) { geometry = null; return; }
-        event.preventDefault(); pointer = event.pointerId; previousPoint = start;
+        if (!start.every(Number.isFinite) || Math.hypot(start[0] - dotPoint[0], start[1] - dotPoint[1]) > .65) { geometry = null; return; }
+        event.preventDefault(); pointer = event.pointerId; grabOffset = [dotPoint[0] - start[0], dotPoint[1] - start[1]]; wallContact = false;
         hint.textContent = 'Drag the dot to □'; maze.classList.add('is-dragging'); capture(maze, event);
       });
       listen(maze, 'pointermove', event => {
@@ -385,74 +408,64 @@
       body.append(board);
       hint.textContent = 'Drag the dot to □';
     } else if (type === 'sign') {
-      const checkpoints = generateSignature(random);
       const path = values => values.map(([x, y], index) => `${index ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
-      const paper = button('ex-sign-paper', 'Trace the dotted signature from left to right in one stroke. Keyboard: Right Arrow traces each segment.');
-      paper.innerHTML = svg(`<path d="M17 10h85M17 17h65" stroke="currentColor" opacity=".15" stroke-width="3" stroke-linecap="round"/><path class="ex-sign-guide" d="${path(checkpoints)}" stroke="currentColor" stroke-width="2" stroke-dasharray="3 4" opacity=".35"/><path class="ex-sign-ink" d="" stroke="#496b52" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${checkpoints[0][0]}" cy="${checkpoints[0][1]}" r="4" fill="#bc7563"/><circle cx="${checkpoints.at(-1)[0]}" cy="${checkpoints.at(-1)[1]}" r="4" stroke="currentColor" stroke-width="1.5"/>`, '0 0 120 70');
+      const paper = button('ex-sign-paper', 'Draw any long signature inside this box, then lift your finger. Keyboard: press Enter to sign.');
+      paper.innerHTML = '<svg viewBox="0 0 160 100" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path class="ex-sign-ink" d="" stroke="#496b52" stroke-width="3" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       const ink = paper.querySelector('.ex-sign-ink');
-      let step = 1, pointer = null, points = [], keyboardStep = 0, invalid = false, traveled = 0;
+      let pointer = null, points = [], traveled = 0, minX = 0, maxX = 0, minY = 0, maxY = 0;
       const point = event => {
         const rect = paper.getBoundingClientRect();
-        // CSS fixes the same 12:7 aspect ratio as the SVG viewport.
-        return [(event.clientX - rect.left) / rect.width * 120, (event.clientY - rect.top) / rect.height * 70];
+        return [(event.clientX - rect.left) / rect.width * 160, (event.clientY - rect.top) / rect.height * 100];
       };
       const paint = () => ink.setAttribute('d', path(points));
-      const reset = () => { step = 1; points = []; traveled = 0; keyboardStep = 0; paint(); };
-      const distanceToSegment = (p, a, b) => {
-        const dx = b[0] - a[0], dy = b[1] - a[1];
-        const t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy), 0, 1);
-        return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
+      const reset = () => { points = []; traveled = 0; paint(); };
+      const inside = p => p.every(Number.isFinite) && p[0] >= 0 && p[0] <= 160 && p[1] >= 0 && p[1] <= 100;
+      const cancel = () => {
+        pointer = null; paper.classList.remove('is-drawing'); release(paper); reset();
       };
-      const trace = event => {
-        if (invalid) return;
+      const draw = event => {
         const p = point(event);
+        if (!inside(p)) { cancel(); error(); return; }
         const previous = points[points.length - 1], distance = Math.hypot(p[0] - previous[0], p[1] - previous[1]);
-        const samples = Math.max(1, Math.ceil(distance / 3));
-        for (let i = 1; i <= samples; i++) {
-          const sample = [previous[0] + (p[0] - previous[0]) * i / samples, previous[1] + (p[1] - previous[1]) * i / samples];
-          if (distanceToSegment(sample, checkpoints[step - 1], checkpoints[step]) > 11) {
-            invalid = true; reset(); error(); return;
-          }
-          traveled += distance / samples;
-          if (Math.hypot(sample[0] - checkpoints[step][0], sample[1] - checkpoints[step][1]) < 7) {
-            step++;
-            if (step === checkpoints.length) { points.push(p); paint(); if (traveled > 50) { feedback(); finish(); } return; }
-          }
-        }
+        traveled += distance;
+        minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
         points.push(p); paint();
       };
       listen(paper, 'pointerdown', event => {
         if (pointer !== null || event.button > 0) return;
         event.preventDefault();
-        reset(); invalid = false;
         const start = point(event);
-        if (Math.hypot(start[0] - checkpoints[0][0], start[1] - checkpoints[0][1]) > 9) { error(); return; }
+        if (!inside(start)) return;
+        reset(); minX = maxX = start[0]; minY = maxY = start[1];
         pointer = event.pointerId;
-        capture(paper, event);
+        capture(paper, event); paper.classList.add('is-drawing');
         points.push(start); paint();
       });
       listen(paper, 'pointermove', event => {
-        if (event.pointerId === pointer) { event.preventDefault(); trace(event); }
-      });
-      const stop = event => {
         if (event.pointerId !== pointer) return;
-        pointer = null;
-        release(paper);
-        if (step !== checkpoints.length) { reset(); if (!invalid) error(); }
-      };
-      listen(paper, 'pointerup', stop);
-      listen(paper, 'pointercancel', stop);
-      listen(paper, 'lostpointercapture', stop);
-      listen(paper, 'keydown', event => {
-        if (event.key !== 'ArrowRight' || pointer !== null) return;
         event.preventDefault();
-        keyboardStep = Math.min(keyboardStep + 1, checkpoints.length - 1);
-        points = checkpoints.slice(0, keyboardStep + 1);
-        paint(); feedback();
-        if (keyboardStep === checkpoints.length - 1) finish();
+        for (const sample of event.getCoalescedEvents?.() ?? []) { if (pointer === null) return; draw(sample); }
+        if (pointer !== null) draw(event);
+      });
+      listen(paper, 'pointerup', event => {
+        if (event.pointerId !== pointer) return;
+        if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) draw(event);
+        if (pointer === null) return;
+        pointer = null; paper.classList.remove('is-drawing'); release(paper);
+        if (traveled >= 100 && Math.hypot(maxX - minX, maxY - minY) >= 64) { feedback(); finish(); }
+        else { reset(); error(); }
+      });
+      const cancelPointer = event => { if (event.pointerId === pointer) cancel(); };
+      listen(paper, 'pointercancel', cancelPointer);
+      listen(paper, 'lostpointercapture', cancelPointer);
+      listen(paper, 'keydown', event => {
+        if (event.key !== 'Enter' || event.repeat || pointer !== null) return;
+        event.preventDefault();
+        points = [[14, 77], [37, 24], [29, 77], [56, 40], [50, 73], [74, 50], [70, 75], [112, 58], [99, 82], [147, 73]];
+        paint(); feedback(); finish();
       });
       body.append(paper);
-      hint.textContent = 'Trace from ● to ○';
+      hint.textContent = 'Draw any signature, then release';
     } else if (type === 'memory') {
       const code = demo ? '425' : Array.from({ length: 3 }, () => integer(1, 6)).join('');
       let visible = true, entered = '';

@@ -77,9 +77,11 @@ function dragTo(handle, target, { release = true, pointerId = 1 } = {}) {
   handle.dispatch('pointermove', { clientX: 60 + (target - initial) * 1.2, pointerId });
   if (release) handle.dispatch('pointerup', { pointerId });
 }
-function traceSignature(paper, checkpoints, pointerId = 1) {
-  paper.dispatch('pointerdown', { clientX: checkpoints[0][0], clientY: checkpoints[0][1], pointerId });
-  for (const [clientX, clientY] of checkpoints.slice(1)) paper.dispatch('pointermove', { clientX, clientY, pointerId });
+function drawSignature(paper, stroke, pointerId = 1, release = true) {
+  paper.rect = { left: 0, top: 0, width: 160, height: 100 };
+  paper.dispatch('pointerdown', { clientX: stroke[0][0], clientY: stroke[0][1], pointerId });
+  for (const [clientX, clientY] of stroke.slice(1)) paper.dispatch('pointermove', { clientX, clientY, pointerId });
+  if (release) paper.dispatch('pointerup', { pointerId });
 }
 function mazeGeometry(g) {
   const maze = g.one('.ex-maze-grid'), width = 20, left = 11, top = 17;
@@ -96,6 +98,10 @@ test('all ten extensions register, mount, and remain inert in demo mode', () => 
     assert.equal(g.completions, 0); assert.equal(g.feedback.length, 0);
     g.destroy(); assert.equal(g.container.children.length, 0);
   }
+});
+test('extras expose concise objectives with consistent category colors', () => {
+  const expected = { roll: ['TURN UPRIGHT', 'sage'], type: ['TYPE THE WORD', 'lavender'], maze: ['DRAG TO EXIT', 'blue'], sign: ['SIGN HERE', 'sage'], memory: ['REMEMBER', 'lavender'], level: ['SLIDE TO MARKS', 'blue'], catch: ['CATCH IT', 'sage'], upload: ['UPLOAD', 'peach'], connect: ['JOIN PIPES', 'blue'], dice: ['TAP LOW TO HIGH', 'butter'] };
+  catalog.forEach(item => assert.deepEqual([item.title, item.color], expected[item.id]));
 });
 test('roll requires beetle to reach upright', () => {
   const g = game('roll'); g.label('Roll right').click(); assert.equal(g.completions, 0);
@@ -127,18 +133,18 @@ test('maze checks every crossed passage during a fast straight swipe and stops b
   assert.equal(g.one('.is-player').getAttribute('data-cell'), '4');
   // The entire eastward corridor is open, but the outer east wall remains closed.
   maze.dispatch('pointermove', { ...center(4), clientX: center(4).clientX + 80 });
-  assert.equal(g.one('.is-player').getAttribute('data-cell'), '4'); assert.equal(maze.captured, null);
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '4'); assert.equal(maze.captured, 1);
   assert.equal(g.completions, 0); assert.equal(g.feedback.at(-1), 'error');
-  maze.dispatch('pointerdown', center(4)); maze.dispatch('pointerup', center(24));
+  maze.dispatch('pointermove', center(4)); maze.dispatch('pointerup', center(24));
   assert.equal(g.one('.is-player').getAttribute('data-cell'), '24'); assert.equal(maze.captured, null);
 });
 test('maze cannot jump through walls or cut diagonally across cell corners', () => {
   const g = game('maze'); const { maze, center } = mazeGeometry(g);
   maze.dispatch('pointerdown', center(10)); assert.equal(maze.captured, undefined);
   maze.dispatch('pointerdown', center(0)); maze.dispatch('pointermove', center(10));
-  assert.equal(g.one('.is-player').getAttribute('data-cell'), '0'); assert.equal(maze.captured, null);
-  maze.dispatch('pointerdown', center(0)); maze.dispatch('pointermove', center(6));
-  assert.equal(g.one('.is-player').getAttribute('data-cell'), '0'); assert.equal(maze.captured, null);
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '0'); assert.equal(maze.captured, 1);
+  maze.dispatch('pointermove', center(0)); maze.dispatch('pointermove', center(6));
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '0'); assert.equal(maze.captured, 1);
   // A right-then-down route exists in this toy maze, but its corner is not a passage.
   const corner = { width: 2, height: 2, cells: [2, 12, 0, 1] };
   const trace = puzzles.traceMazeSegment(corner, 0, [.5, .5], [1.5, 1.5]);
@@ -148,6 +154,32 @@ test('maze cannot jump through walls or cut diagonally across cell corners', () 
   const skippedWall = puzzles.traceMazeSegment(corridor, 0, [.5, .5], [4.5, .5]);
   assert.equal(skippedWall.blocked, true); assert.equal(skippedWall.cell, 1);
   assert.deepEqual(Array.from(skippedWall.visited), [1]);
+});
+test('maze dot and trail move continuously inside cells, clamp at walls, and resume without re-grabbing', () => {
+  const g = game('maze'); const { maze, center } = mazeGeometry(g); const dot = g.one('.ex-maze-dot');
+  const start = center(0); maze.dispatch('pointerdown', start);
+  maze.dispatch('pointermove', { clientX: start.clientX + 4, clientY: start.clientY + 6 });
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '0');
+  assert.ok(Math.abs(Number(dot.getAttribute('cx')) - .7) < 1e-9); assert.ok(Math.abs(Number(dot.getAttribute('cy')) - .8) < 1e-9);
+  assert.match(g.one('.ex-maze-ink').getAttribute('d'), /L0\.700 0\.800/);
+  maze.dispatch('pointermove', { clientX: start.clientX + 4, clientY: start.clientY + 25 });
+  assert.equal(maze.captured, 1); assert.ok(Number(dot.getAttribute('cy')) > .9 && Number(dot.getAttribute('cy')) < 1);
+  maze.dispatch('pointermove', center(1));
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '1'); assert.equal(Number(dot.getAttribute('cx')), 1.5);
+  assert.equal(maze.captured, 1);
+});
+test('maze grip preserves the offset and does not snap the dot to a cell center', () => {
+  const g = game('maze'); const { maze, center } = mazeGeometry(g); const dot = g.one('.ex-maze-dot');
+  const start = center(0);
+  maze.dispatch('pointerdown', { ...start, clientX: start.clientX + 4 });
+  assert.equal(Number(dot.getAttribute('cx')), .5);
+  maze.dispatch('pointermove', { ...start, clientX: start.clientX + 8 });
+  assert.ok(Math.abs(Number(dot.getAttribute('cx')) - .7) < 1e-9);
+  maze.dispatch('pointercancel');
+  maze.dispatch('pointerdown', { ...start, clientX: start.clientX + 4 });
+  assert.ok(Math.abs(Number(dot.getAttribute('cx')) - .7) < 1e-9);
+  maze.dispatch('pointermove', { ...start, clientX: start.clientX + 6 });
+  assert.ok(Math.abs(Number(dot.getAttribute('cx')) - .8) < 1e-9);
 });
 test('maze processes coalesced bend samples instead of cutting across a turn', () => {
   const g = game('maze'); const { maze, center } = mazeGeometry(g);
@@ -183,29 +215,45 @@ test('maze keeps keyboard arrow movement accessible while exposing no movement b
   }
   completedOnce(g);
 });
-test('signatures vary and every generated guide accepts a continuous trace', () => {
-  const signatures = new Set();
-  for (let seed = 1; seed <= 80; seed++) {
-    const guide = puzzles.generateSignature(seeded(seed)); const g = game('sign', { random: seeded(seed) });
-    signatures.add(JSON.stringify(guide));
-    traceSignature(g.one('.ex-sign-paper'), guide); completedOnce(g);
-    assert.equal(g.one('.ex-sign-paper').captured, null);
+test('sign accepts arbitrary substantial freehand strokes from any starting point on release', () => {
+  const strokes = [
+    [[10, 45], [140, 45]], [[150, 70], [130, 20], [110, 70], [85, 30], [50, 65], [15, 40]],
+    [[80, 15], [125, 30], [130, 75], [70, 90], [25, 60], [35, 20]],
+    [[15, 80], [30, 20], [45, 80], [70, 35], [95, 70], [145, 55]],
+  ];
+  for (const stroke of strokes) {
+    const g = game('sign'); const paper = g.one('.ex-sign-paper');
+    assert.equal(g.all('.ex-sign-guide').length, 0); assert.match(paper.getAttribute('aria-label'), /any long signature.*Enter/);
+    drawSignature(paper, stroke, 1, false); assert.equal(g.completions, 0);
+    paper.dispatch('pointerup'); completedOnce(g); assert.equal(paper.captured, null);
   }
-  assert.ok(signatures.size > 70);
 });
-test('signature rejects separate taps, endpoint jumps, wrong pointer input, and canceled traces', () => {
-  const guide = puzzles.generateSignature(() => 0); const g = game('sign'); const paper = g.one('.ex-sign-paper');
-  for (const [clientX, clientY] of guide) { paper.dispatch('pointerdown', { clientX, clientY }); paper.dispatch('pointerup'); }
-  assert.equal(g.completions, 0);
-  paper.dispatch('pointerdown', { clientX: guide[0][0], clientY: guide[0][1] });
-  paper.dispatch('pointermove', { clientX: guide.at(-1)[0], clientY: guide.at(-1)[1] }); paper.dispatch('pointerup');
-  assert.equal(g.completions, 0);
-  paper.dispatch('pointerdown', { clientX: guide[0][0], clientY: guide[0][1], pointerId: 7 });
-  paper.dispatch('pointerdown', { clientX: 120, clientY: 0, pointerId: 8 });
-  for (const [clientX, clientY] of guide.slice(1)) paper.dispatch('pointermove', { clientX, clientY, pointerId: 8 });
-  assert.equal(g.completions, 0); assert.equal(paper.captured, 7);
-  paper.dispatch('pointercancel', { pointerId: 7 }); assert.equal(paper.captured, null);
-  traceSignature(paper, guide); completedOnce(g);
+test('free signature rejects taps, short strokes, and accumulated tiny jitter', () => {
+  const g = game('sign'); const paper = g.one('.ex-sign-paper');
+  for (const stroke of [[[20, 30]], [[10, 20], [30, 30]], Array.from({ length: 100 }, (_, i) => [70 + i % 2 * 3, 50 + i % 3])]) {
+    drawSignature(paper, stroke); assert.equal(g.completions, 0); assert.equal(g.one('.ex-sign-ink').getAttribute('d'), '');
+  }
+});
+test('free signature owns its pointer and cancels outside-box, coalesced outside, and interrupted strokes', () => {
+  const valid = [[15, 80], [30, 20], [60, 65], [100, 35], [140, 70]];
+  for (const cancellation of ['pointercancel', 'lostpointercapture', 'outside', 'coalesced']) {
+    const g = game('sign'); const paper = g.one('.ex-sign-paper');
+    drawSignature(paper, valid.slice(0, 3), 7, false);
+    paper.dispatch('pointerdown', { clientX: 120, clientY: 0, pointerId: 8 });
+    paper.dispatch('pointermove', { clientX: 150, clientY: 80, pointerId: 8 });
+    paper.dispatch('pointerup', { pointerId: 8 }); paper.dispatch('keydown', { key: 'Enter' });
+    assert.equal(g.completions, 0); assert.equal(paper.captured, 7);
+    if (cancellation === 'outside') paper.dispatch('pointermove', { clientX: 180, clientY: 50, pointerId: 7 });
+    else if (cancellation === 'coalesced') paper.dispatch('pointermove', { clientX: 130, clientY: 50, pointerId: 7, getCoalescedEvents: () => [{ clientX: -10, clientY: 50 }] });
+    else paper.dispatch(cancellation, { pointerId: 7 });
+    paper.dispatch('pointerup', { pointerId: 7 }); assert.equal(g.completions, 0); assert.equal(paper.captured, null);
+    drawSignature(paper, valid); completedOnce(g);
+  }
+});
+test('free signature has an explicit Enter-key accessible alternative', () => {
+  const g = game('sign'); const paper = g.one('.ex-sign-paper');
+  paper.click(); paper.dispatch('keydown', { key: 'Enter', repeat: true }); assert.equal(g.completions, 0);
+  paper.dispatch('keydown', { key: 'Enter', repeat: false }); completedOnce(g);
 });
 test('memory hides the digits before accepting answers and reveals errors for a retry', () => {
   const g = game('memory'); g.label('Recall 1').click(); assert.equal(g.completions, 0);
@@ -298,8 +346,7 @@ test('dice only clears after all six faces are counted in ascending order', () =
 test('destroy removes listeners and pointer capture during a drag', () => {
   for (const type of ['sign', 'level', 'catch']) {
     const g = game(type); const handle = g.one(type === 'sign' ? '.ex-sign-paper' : type === 'level' ? '.ex-level-slider' : '.ex-claw');
-    const guide = puzzles.generateSignature(() => 0);
-    handle.dispatch('pointerdown', { clientX: type === 'sign' ? guide[0][0] : 60, clientY: guide[0][1] }); assert.equal(handle.captured, 1);
+    handle.dispatch('pointerdown', { clientX: 60, clientY: 35 }); assert.equal(handle.captured, 1);
     g.destroy(); assert.equal(handle.captured, null); assert.equal(g.container.children.length, 0);
     handle.dispatch('pointermove', { clientX: 108, clientY: 48 }); assert.equal(g.completions, 0);
   }

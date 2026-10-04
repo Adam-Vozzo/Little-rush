@@ -1,6 +1,6 @@
 # Little Rush
 
-A mobile-first 2D micro-game collection with 21 playable challenges, built with plain HTML, CSS and JavaScript. No libraries, external assets, account or network connection are required to play.
+A mobile-first 2D micro-game collection with 21 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.4.0 adds a dedicated title screen, larger play controls, personal records, a customizable game pool and selectable visual styles. No libraries, external assets, account or network connection are required to play.
 
 ## Play
 
@@ -23,40 +23,67 @@ Future pushes to `main` update the site automatically. See [GitHub's publishing-
 
 - The portrait board has 2 columns and 4 rows of square slots.
 - The first game appears immediately. A new game appears every **2.5 seconds** in a random empty slot. When all eight slots are occupied, that spawn is skipped; the next scheduled spawn uses an available slot.
-- Every tile has **25 seconds**. The top-right circle drains and turns red in its final 4 seconds. A single expired tile ends the run.
-- The **first Break encounter is HATCH**: wait 3 seconds for the caterpillar to become a chrysalis, then tap to release a butterfly. HATCH appears only once per run. Subsequent BREAK games are geodes: tap 8 times to crack the shell and reveal glowing crystals.
-- The butterfly flutters over the board for the rest of that run. Hatching unlocks FEED, which is queued for the next regular spawn. Later Feed tiles can appear randomly, with at most one active at a time.
+- Every tile has **25 seconds**. Its filled top-right circle empties as time runs out and turns red in the final 4 seconds. A single expired tile ends the run.
+- When enabled, **WAIT & HATCH** starts the run: wait 3 seconds for the caterpillar to become a chrysalis, then tap to release a butterfly. It appears only once per run. **CRACK IT** games are geodes: tap 8 times to crack the shell and reveal glowing crystals.
+- The butterfly flutters over the board for the rest of that run. Hatching unlocks **FEED BUTTERFLY** when that game is enabled, queuing it for the next regular spawn. Later Feed tiles can appear randomly, with at most one active at a time.
 - Drag nectar out of its tile to the butterfly. It stays still while you carry nectar, making it easier to reach. A missed drop can be retried. Keyboard users can select nectar with Enter and then activate the focused butterfly.
 - Complete tiles in any order. Wrong inputs can be retried. Pause freezes game time, animations and spawn scheduling; leaving the tab pauses automatically. Restart clears the butterfly and Feed unlock.
-- Run time, cleared count and best time are above the board. This version uses its own local best-time record, separate from earlier timing rules. Sound is optional and initially off.
+- During play, a compact bar shows elapsed time, cleared count and pause. Each tile's title states its objective. Controls fill the remaining tile space, with no visible instruction footer. Essential puzzle content, such as a wire's target endpoints, stays visible; detailed state updates remain available to screen readers. Sound is optional and initially off.
+
+## Records and Tweaks
+
+The title screen shows **All-time best** and **Today's best**. Each keeps the longest survival time and the highest cleared count independently, so those two records can come from different runs. Records are saved locally in this browser. Daily records follow the device's local calendar date.
+
+Open **Tweaks** beside the title. Its **Micro-games** tab turns individual games on or off; its **Styles** tab controls the appearance. The game selection is saved in this browser and applies to the next run. All games are enabled initially.
+
+- Turning off **WAIT & HATCH** also turns off **FEED BUTTERFLY**. Feed can only be enabled while Hatch is enabled.
+- At least one repeatable challenge must be enabled to start. **WAIT & HATCH** alone is not a valid game pool.
+- Enabling Hatch makes it the first challenge; otherwise the run starts with an enabled repeatable game.
+
+In **Styles**, choose **Flat** or **Holofoil**. Style changes apply immediately, are saved in this browser and are restored when the game is reopened.
+
+- **Flat** is the default minimal pastel appearance.
+- **Holofoil** uses a dark backdrop, iridescent tiles and a brief perspective landing when a tile appears. A WebGL fragment shader produces the moving foil highlights and responds to the pointer; category colors and readable game controls remain distinct.
+- With the system's reduced-motion preference enabled, foil highlights remain still and the landing animation is removed. Foil animation also pauses while a dialog is open or the page is hidden.
+- If WebGL is unavailable or its context is lost, Holofoil keeps a static CSS foil finish. Game controls continue to work.
+
+Tile colors identify five consistent categories:
+
+| Color | Category | Games |
+| --- | --- | --- |
+| Butter | Numbers | Solve, Tap in Order, Tap Low to High |
+| Lavender | Memory | Repeat, Remember, Type the Word |
+| Blue | Spatial | Turn On, Match Shapes, Cut the Wire, Drag to Exit, Slide to Marks, Join Pipes |
+| Sage | Dexterity | Turn Upright, Stop in the Green, Hold, Sign Here, Catch It |
+| Peach | Nature | Wait & Hatch, Crack It, Upload, Feed Butterfly |
 
 ## The 21 games
 
 | Game | Action |
 | --- | --- |
-| HATCH | Wait for the chrysalis, then tap to release the butterfly. |
-| BREAK | Tap a geode 8 times to discover crystals inside. |
+| WAIT & HATCH | Wait for the chrysalis, then tap to release the butterfly. |
+| CRACK IT | Tap a geode 8 times to discover crystals inside. |
 | SOLVE | Choose the correct arithmetic answer. A wrong answer locks all choices for 0.75 seconds. |
-| ORDER | Tap numbers from 1 to 4. |
-| SWITCH | Turn all three switches on. |
+| TAP IN ORDER | Tap numbers from 1 to 4. |
+| TURN ON | Turn all three switches on. |
 | REPEAT | Watch and repeat a three-color sequence. |
-| STOP | Stop the moving dot inside the highlighted zone. |
+| STOP IN THE GREEN | Tap anywhere in the tile's lower button area while the moving dot is inside the green zone. |
 | HOLD | Hold the button continuously for one second. |
-| MATCH | Drag all three shapes to their matching outline slots. |
-| WIRES | Trace randomly labelled letter/digit endpoints and cut the requested wire. |
-| ROLL | Rotate the beetle upright. |
-| TYPE | Enter one of 106 nature-themed words using the tile's letter keys. |
-| MAZE | Grab and drag the dot through the passages of a generated 5×5 maze. Walls block shortcuts; arrow keys are available when the maze has keyboard focus. |
-| SIGN | Trace a newly generated dotted signature in one continuous gesture. |
-| MEMORY | Remember a three-digit code, then enter it after it disappears. |
-| LEVEL | Grab and slide three knobs to randomized target marks. Tapping the track does not move them. |
-| CATCH | Grab and slide the claw above the flower, then drop it. Uses the same drag control as Level. |
+| MATCH SHAPES | Drag all three shapes to their matching outline slots. |
+| CUT THE WIRE | Trace randomly labelled letter/digit endpoints and cut the requested wire. |
+| TURN UPRIGHT | Rotate the beetle upright. |
+| TYPE THE WORD | Enter one of 106 nature-themed words using the tile's letter keys. |
+| DRAG TO EXIT | Draw a smooth path through a generated 5×5 maze. The dot follows continuously, sliding along walls without crossing them; arrow keys remain available. |
+| SIGN HERE | Draw any sufficiently long signature inside the box, then lift your finger. |
+| REMEMBER | Remember a three-digit code, then enter it after it disappears. |
+| SLIDE TO MARKS | Grab and slide three knobs to randomized target marks. Tapping the track does not move them. |
+| CATCH IT | Grab and slide the claw above the flower, then drop it. Uses the same drag control as Slide to Marks. |
 | UPLOAD | Tap Upload, wait for the three-second progress bar, then tap Complete. |
-| CONNECT | Rotate six pipe segments to connect the two endpoints of a generated puzzle. |
-| DICE | Tap the dice in ascending dot-count order. |
-| FEED | Drag nectar across the board to the unlocked butterfly. |
+| JOIN PIPES | Rotate six pipe segments to connect the two endpoints of a generated puzzle. |
+| TAP LOW TO HIGH | Tap the dice in ascending dot-count order. |
+| FEED BUTTERFLY | Drag nectar across the board to the unlocked butterfly. |
 
-The start screen shows inert examples. Select **Let's play** to start a run. The layout keeps all eight square tiles on screen at 320 x 667 and 390 x 844. At 390 x 844, the tiles are approximately 173px per side (previously 146px).
+Select **Let's play** on the title screen to start a run. The play screen gives most of the portrait viewport to its eight square tiles. The compact header, six-pixel tile padding and larger controls accommodate both touch and mouse input; keyboard alternatives are also available for the supported interactions.
 
 ## Extend
 
@@ -64,8 +91,9 @@ The start screen shows inert examples. Select **Let's play** to start a run. The
 - `microgames.js` and `microgames.css`: ten core games, including hatch, geode, wire, switch and shape interactions.
 - `extra-games.js` and `extra-games.css`: ten additional games, pure puzzle generators, and the shared thumb-only slider control.
 - `butterfly.js` and `butterfly.css`: persistent butterfly and cross-board nectar drag interaction.
-- `app.js`: run UI, the one-time hatch and Feed gating, countdowns, sounds and best-time storage.
-- `styles.css`: compact responsive portrait board and desktop presentation.
+- `app.js`: title and play screens, the one-time hatch and Feed gating, Tweaks selections, countdowns, sounds and local daily/all-time records.
+- `styles.css`: compact responsive portrait board, title screen and dialogs.
+- `theme.js` and `theme.css`: Flat/Holofoil appearance, shared WebGL foil rendering, tile landing animation, reduced-motion support and the CSS fallback.
 
 Add a pack with `LittleRushGames.register(catalogEntries, mountFunction)`. Each catalog entry is `{id, title, color}`. The mounter receives `(container, type, options)` and returns `tick(ageMs, deltaMs)` and `destroy()`. Call `options.onComplete()` on success, use the supplied game clock for animation, and remove listeners/pointer captures on destruction. `options.demo` makes previews inert.
 
@@ -73,8 +101,8 @@ Add a pack with `LittleRushGames.register(catalogEntries, mountFunction)`. Each 
 
 ## Verification
 
-Run `npm test` / `node --test tests/*.test.cjs`. Tests cover all 21 games, 2.5-second spawns, 25-second deadline boundaries, full-board handling, queue/unlock logic, pointer ownership, cooldowns, upload states, pause/restart/expiry cleanup, and the integrated hatch-to-feed lifecycle. Independent solvers verify generated puzzles across 1,000 seeds. DOM test doubles verify logic; they do not replace browser checks.
+Run `npm test` / `node --test tests/*.test.cjs`. Tests cover all 21 games, 2.5-second spawns, 25-second deadline boundaries, full-board handling, queue/unlock logic, pointer ownership, cooldowns, upload states, pause/restart/expiry cleanup, and the integrated hatch-to-feed lifecycle. Independent solvers verify generated puzzles across 1,000 seeds. DOM test doubles verify logic; browser checks verify rendered layout and real pointer behavior.
 
-Browser checks covered the real hatch-to-butterfly-to-nectar sequence, shape drops, wire cuts, bounded switch knobs, Level/Catch drag completion and ignored track taps, upload progression, generated maze drag completion and blocked wall shortcuts, pipe solutions, geode reveal, math cooldown, 128px game layouts, and both phone sizes. The game also loaded and started with every asset served under a `/Little-rush/` path. No physical iOS/Android device testing has been performed.
+The browser QA checklist includes the hatch-to-butterfly-to-nectar sequence, shape drops, wire cuts, bounded switch knobs, slider and claw drags, ignored track taps, upload progression, generated maze routes and blocked wall shortcuts, pipe solutions, geode reveal, math cooldown, compact tile layouts, portrait phone sizes, records, and persistent Tweaks selections. Check both Styles choices, saved theme restoration, Holofoil's reduced-motion behavior and its WebGL fallback. Also check loading and starting with every asset served under a `/Little-rush/` path. No physical iOS/Android device testing has been performed.
 
-For isolated interaction checks, open `/tests/playground.html` from the local server. It exposes the full catalog without run deadlines and lets you inspect 128px and 174px tiles.
+For isolated interaction checks, open `/tests/playground.html` from the local server. It exposes the full catalog without run deadlines and lets you inspect 128px, 174px and 211px tiles.

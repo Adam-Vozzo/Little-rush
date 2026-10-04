@@ -3,65 +3,81 @@
   const $ = id => document.getElementById(id);
   const catalog = window.LittleRushGames.catalog;
   const lifetime = window.LittleRushEngine.TILE_LIFETIME_MS;
-  const spawnInterval = window.LittleRushEngine.SPAWN_INTERVAL_MS;
   const board = $('game-board');
   const dialog = $('game-dialog');
   const habitat = new window.LittleRushButterfly.Habitat(board.parentElement);
-  const cells = [];
-  const views = new Map();
-  const flashes = new Map();
-  let lastFrame = performance.now();
-  let modalKind = '';
-  let bestMs = Number(readSaved('little-rush-best-v3', '0')) || 0;
-  let soundEnabled = readSaved('little-rush-sound', 'off') === 'on';
-  let audioContext;
-  let playingDemo = true;
-  let lastShownTime = '';
-  let lastShownScore = -1;
-  let bestAtStart = bestMs;
-  let hatchIntroduced = false;
-
+  const cells = [], views = new Map(), flashes = new Map();
+  let lastFrame = performance.now(), modalKind = '', atHome = true;
+  let lastShownTime = '', lastShownScore = -1, hatchIntroduced = false;
+  let soundEnabled = readSaved('little-rush-sound', 'off') === 'on', audioContext;
+  let selectedTheme = readSaved('little-rush-theme-v1', 'flat') === 'holofoil' ? 'holofoil' : 'flat';
+  let tweaksTab = 'games';
+  const positive = value => Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+  const savedRecords = readJSON('little-rush-records-v1', {});
+  const records = {
+    allTime: { timeMs: Math.max(positive(savedRecords?.allTime?.timeMs), positive(readSaved('little-rush-best-v3', '0'))), score: positive(savedRecords?.allTime?.score) },
+    daily: { date: String(savedRecords?.daily?.date || ''), timeMs: positive(savedRecords?.daily?.timeMs), score: positive(savedRecords?.daily?.score) }
+  };
+  const savedDisabled = readJSON('little-rush-disabled-games-v1', []);
+  let disabledGames = new Set(Array.isArray(savedDisabled) ? savedDisabled.filter(id => catalog.some(game => game.id === id)) : []);
+  if (disabledGames.has('press')) disabledGames.add('feed');
+  let bestAtStart = records.allTime.timeMs, scoreAtStart = records.allTime.score;
   function readSaved(key, fallback) { try { return localStorage.getItem(key) || fallback; } catch { return fallback; } }
-  function save(key, value) { try { localStorage.setItem(key, String(value)); } catch { /* Private/file mode can disable storage. */ } }
+  function readJSON(key, fallback) { try { return JSON.parse(readSaved(key, 'null')) ?? fallback; } catch { return fallback; } }
+  function save(key, value) { try { localStorage.setItem(key, String(value)); } catch { /* Records are optional in private mode. */ } }
+  function localDay() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
+  function refreshDay() {
+    const date = localDay();
+    if (records.daily.date === date) return;
+    records.daily = { date, timeMs: 0, score: 0 };
+    save('little-rush-records-v1', JSON.stringify(records));
+  }
   function timeText(ms, tenths = false) {
     const seconds = Math.floor(ms / 1000);
     const main = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
     return tenths ? `${main}<span>.${Math.floor(ms / 100) % 10}</span>` : main;
   }
+  function renderRecords() {
+    refreshDay();
+    $('alltime-time').textContent = timeText(records.allTime.timeMs);
+    $('alltime-score').textContent = records.allTime.score;
+    $('today-time').textContent = timeText(records.daily.timeMs);
+    $('today-score').textContent = records.daily.score;
+  }
+  function updateRecords(state) {
+    refreshDay();
+    for (const record of [records.allTime, records.daily]) {
+      record.timeMs = Math.max(record.timeMs, positive(state.elapsedMs));
+      record.score = Math.max(record.score, positive(state.score));
+    }
+    save('little-rush-records-v1', JSON.stringify(records));
+    save('little-rush-best-v3', records.allTime.timeMs);
+    renderRecords();
+  }
+  function canStart() { return catalog.some(game => game.id !== 'press' && !disabledGames.has(game.id) && (game.id !== 'feed' || !disabledGames.has('press'))); }
+  function syncStart() {
+    $('start-button').disabled = !canStart();
+    $('start-button').setAttribute('aria-label', canStart() ? "Let's play" : 'Enable a repeatable micro-game in Tweaks to play');
+    $('home-note').textContent = canStart() ? 'Personal records, saved on this device.' : 'Enable a repeatable micro-game in Tweaks to play.';
+  }
   function initAudio() {
     if (!soundEnabled) return;
-    try {
-      const Audio = window.AudioContext || window.webkitAudioContext;
-      if (Audio && !audioContext) audioContext = new Audio();
-      if (audioContext?.state === 'suspended') audioContext.resume().catch(() => {});
-    } catch { /* Audio is optional. */ }
+    try { const Audio = window.AudioContext || window.webkitAudioContext; if (Audio && !audioContext) audioContext = new Audio(); if (audioContext?.state === 'suspended') audioContext.resume().catch(() => {}); } catch { /* Audio is optional. */ }
   }
   function tone(frequency, delay = 0, duration = .09, volume = .035) {
     if (!soundEnabled || !audioContext || audioContext.state !== 'running') return;
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    const at = audioContext.currentTime + delay;
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(frequency, at);
-    gain.gain.setValueAtTime(0, at);
-    gain.gain.linearRampToValueAtTime(volume, at + .007);
-    gain.gain.exponentialRampToValueAtTime(.001, at + duration);
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-    oscillator.start(at);
-    oscillator.stop(at + duration + .02);
+    const oscillator = audioContext.createOscillator(), gain = audioContext.createGain(), at = audioContext.currentTime + delay;
+    oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(frequency, at);
+    gain.gain.setValueAtTime(0, at); gain.gain.linearRampToValueAtTime(volume, at + .007); gain.gain.exponentialRampToValueAtTime(.001, at + duration);
+    oscillator.connect(gain); gain.connect(audioContext.destination); oscillator.start(at); oscillator.stop(at + duration + .02);
     oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
   }
-  function feedback(kind) {
-    if (kind === 'error') tone(180, 0, .08, .025);
-    else tone(540, 0, .035, .02);
-  }
+  function feedback(kind) { tone(kind === 'error' ? 180 : 540, 0, kind === 'error' ? .08 : .035, .025); }
   function announce(text) { $('announcer').textContent = text; }
-
   const engine = new window.LittleRushEngine({
-    types: catalog.map(game => game.id),
-    initialType: 'press',
+    types: catalog.map(game => game.id), initialType: 'press',
     isTypeAvailable(type, state) {
+      if (disabledGames.has(type)) return false;
       if (type === 'press') return !hatchIntroduced;
       if (type === 'feed') return habitat.active && !state.tiles.some(tile => tile?.type === 'feed');
       return true;
@@ -69,253 +85,164 @@
     onSpawn(tile) {
       if (tile.type === 'press') hatchIntroduced = true;
       tone(680, 0, .07, .022);
-      const meta = catalog.find(game => game.id === tile.type);
-      announce(`${meta.title} appeared in row ${Math.floor(tile.slot / 2) + 1}, column ${tile.slot % 2 + 1}. ${lifetime / 1000} seconds.`);
+      const game = catalog.find(item => item.id === tile.type);
+      announce(`${game.title} appeared in row ${Math.floor(tile.slot / 2) + 1}, column ${tile.slot % 2 + 1}. ${lifetime / 1000} seconds.`);
     },
     onComplete(tile, state) {
-      if (tile.type === 'press' && habitat.hatch(tile.slot, state.elapsedMs)) {
-        engine.enqueueType('feed');
-        announce('A butterfly hatched. Feed challenges are now unlocked.');
-      }
+      if (tile.type === 'press' && habitat.hatch(tile.slot, state.elapsedMs) && !disabledGames.has('feed')) engine.enqueueType('feed');
       if (tile.type === 'feed') habitat.celebrate(state.elapsedMs);
       flashes.set(tile.slot, performance.now() + (tile.type === 'break' ? 700 : 420));
-      tone(660, 0, .11);
-      tone(880, .07, .16, .025);
-      announce(`${state.score} cleared.`);
+      tone(660, 0, .11); tone(880, .07, .16, .025); announce(`${state.score} cleared.`);
     },
-    onEnd(tile, state) {
-      updateBest(state.elapsedMs);
-      tone(330, 0, .18, .03);
-      tone(247, .13, .25, .025);
-      showResult(tile, state);
-    }
+    onEnd(tile, state) { updateRecords(state); tone(330, 0, .18, .03); tone(247, .13, .25, .025); showResult(tile, state); }
   });
-
-  function updateBest(ms) {
-    if (ms > bestMs) { bestMs = ms; save('little-rush-best-v3', bestMs); }
-    $('best-time').textContent = timeText(bestMs);
-  }
   function destroyViews() { for (const view of views.values()) view.api.destroy(); views.clear(); }
-  function timerMarkup() {
-    return `<div class="tile-timer" role="img" aria-label="${lifetime / 1000} seconds remaining"><svg viewBox="0 0 24 24" aria-hidden="true"><circle class="timer-track" cx="12" cy="12" r="9"/><circle class="timer-arc" cx="12" cy="12" r="9"/></svg><span>${lifetime / 1000}</span></div>`;
+  function piePath(fraction) {
+    if (fraction >= .999999) return 'M12 2A10 10 0 1 1 12 22A10 10 0 1 1 12 2Z';
+    if (fraction <= 0) return '';
+    const angle = fraction * Math.PI * 2 - Math.PI / 2;
+    return `M12 12L12 2A10 10 0 ${fraction > .5 ? 1 : 0} 1 ${(12 + 10 * Math.cos(angle)).toFixed(3)} ${(12 + 10 * Math.sin(angle)).toFixed(3)}Z`;
   }
+  function timerMarkup() { return `<div class="tile-timer" role="img" aria-label="${lifetime / 1000} seconds remaining"><svg viewBox="0 0 24 24" aria-hidden="true"><circle class="timer-track" cx="12" cy="12" r="10"/><path class="timer-fill" d="${piePath(1)}"/></svg></div>`; }
   function emptyCell(cell, slot) {
-    cell.className = 'tile empty';
-    cell.removeAttribute('data-game');
-    cell.removeAttribute('data-tile-id');
-    cell.setAttribute('aria-label', `Empty slot ${slot + 1}`);
-    cell.innerHTML = `<span class="empty-mark" aria-hidden="true">+</span><span class="slot-number" aria-hidden="true">0${slot + 1}</span>`;
-    cell.dataset.view = 'empty';
+    cell.className = 'tile empty'; cell.removeAttribute('data-game'); cell.removeAttribute('data-tile-id');
+    cell.setAttribute('aria-label', `Empty slot ${slot + 1}`); cell.innerHTML = '<span class="empty-mark" aria-hidden="true">+</span>'; cell.dataset.view = 'empty';
   }
-  for (let slot = 0; slot < 8; slot++) {
-    const cell = document.createElement('section');
-    cell.className = 'tile empty';
-    board.append(cell);
-    cells.push(cell);
-  }
-  function mountTile(cell, game, tile, demo) {
-    cell.className = `tile ${game.color} ${demo ? 'demo' : 'new-tile'}`;
-    cell.dataset.game = game.id;
-    cell.dataset.view = demo ? `demo-${game.id}` : tile.id;
-    if (!demo) cell.dataset.tileId = tile.id;
-    else cell.removeAttribute('data-tile-id');
-    cell.setAttribute('aria-label', `${game.title} ${demo ? 'preview' : 'micro-game'}`);
+  for (let slot = 0; slot < 8; slot++) { const cell = document.createElement('section'); board.append(cell); cells.push(cell); emptyCell(cell, slot); }
+  function mountTile(cell, game, tile) {
+    cell.className = `tile ${game.color} new-tile`; cell.dataset.game = game.id; cell.dataset.view = tile.id; cell.dataset.tileId = tile.id;
+    cell.setAttribute('aria-label', `${game.title} micro-game`);
     cell.innerHTML = `<header class="tile-header"><span class="tile-title">${game.title}</span>${timerMarkup()}</header><div class="microgame"></div>`;
-    const timer = cell.querySelector('.tile-timer');
-    const arc = cell.querySelector('.timer-arc');
-    if (demo) {
-      arc.style.strokeDashoffset = String(56.5487 * (.1 + (tile.slot % 4) * .16));
-      timer.setAttribute('aria-label', 'Countdown preview');
-    }
+    const timer = cell.querySelector('.tile-timer'), fill = cell.querySelector('.timer-fill');
     const api = window.LittleRushGames.mount(cell.querySelector('.microgame'), game.id, {
-      demo,
-      butterfly: habitat,
-      onComplete: () => {
-        // Let the next frame reconcile tiles; a tick can complete a game while
-        // the current board snapshot is still being rendered.
-        if (!demo) engine.complete(tile.id, performance.now());
-      },
-      onFeedback: feedback
+      butterfly: habitat, onComplete: () => engine.complete(tile.id, performance.now()), onFeedback: feedback
     });
-    const view = {api, id: tile.id, type: game.id, cell, timer, arc, number: timer.querySelector('span'), lastSeconds: -1};
-    views.set(tile.slot, view);
+    views.set(tile.slot, { api, id: tile.id, type: game.id, timer, fill, lastSeconds: -1 });
   }
   function showHome() {
-    closeDialog();
-    if (engine.status === 'running') engine.pause(performance.now());
-    destroyViews();
-    habitat.reset();
-    hatchIntroduced = false;
-    flashes.clear();
-    playingDemo = true;
-    document.body.classList.remove('is-running');
-    board.removeAttribute('inert');
-    const previewOrder = ['press', 'wires', 'switch', 'shapes', 'maze', 'level', 'break', 'connect'];
-    cells.forEach((cell, slot) => {
-      const game = catalog.find(item => item.id === previewOrder[slot]) || catalog[slot % catalog.length];
-      mountTile(cell, game, {id: `demo-${slot}`, slot}, true);
-    });
-    $('run-time').innerHTML = timeText(0, true);
-    $('score').textContent = '00';
-    $('best-time').textContent = timeText(bestMs);
-    lastShownTime = ''; lastShownScore = -1;
-    $('pause-button').disabled = true;
-    $('start-button').hidden = false;
-    $('start-note').hidden = false;
-    $('play-note').hidden = true;
-    $('spawn-track').hidden = true;
-    $('next-label').textContent = 'Eight squares. Endless little possibilities.';
-    $('next-count').textContent = '';
+    if (!atHome) { if (engine.status === 'running') engine.pause(performance.now()); updateRecords(engine.snapshot(performance.now())); }
+    closeDialog(); destroyViews(); habitat.reset(); hatchIntroduced = false; flashes.clear(); atHome = true;
+    document.body.classList.remove('is-running'); cells.forEach(emptyCell);
+    $('home-screen').hidden = false; $('play-screen').hidden = true; $('pause-button').disabled = true;
+    renderRecords(); syncStart();
   }
   function startRun() {
-    closeDialog();
-    initAudio();
-    destroyViews();
-    habitat.reset();
-    hatchIntroduced = false;
-    flashes.clear();
-    playingDemo = false;
-    bestAtStart = bestMs;
-    cells.forEach(emptyCell);
-    board.removeAttribute('inert');
-    document.body.classList.add('is-running');
-    $('pause-button').disabled = false;
-    $('start-button').hidden = true;
-    $('start-note').hidden = true;
-    $('play-note').hidden = false;
-    $('spawn-track').hidden = false;
-    $('next-label').textContent = 'Next little challenge';
-    lastFrame = performance.now();
-    engine.start(lastFrame);
-    render(engine.snapshot(lastFrame), lastFrame, 0);
-    $('pause-button').focus({preventScroll:true});
+    if (!canStart()) return;
+    if (!atHome) updateRecords(engine.snapshot(performance.now()));
+    closeDialog(); initAudio(); destroyViews(); habitat.reset(); hatchIntroduced = false; flashes.clear(); atHome = false;
+    bestAtStart = records.allTime.timeMs; scoreAtStart = records.allTime.score;
+    cells.forEach(emptyCell); document.body.classList.add('is-running');
+    $('home-screen').hidden = true; $('play-screen').hidden = false; $('pause-button').disabled = false;
+    engine.types = catalog.filter(game => !disabledGames.has(game.id)).map(game => game.id);
+    engine.initialType = disabledGames.has('press') ? null : 'press';
+    lastShownTime = ''; lastShownScore = -1; lastFrame = performance.now();
+    engine.start(lastFrame); render(engine.snapshot(lastFrame), lastFrame, 0);
+    $('pause-button').focus({ preventScroll: true });
   }
   function render(state, now, delta) {
-    if (playingDemo) return;
+    if (atHome) return;
     habitat.update(state.elapsedMs, state.status === 'running');
     const formatted = timeText(state.elapsedMs, true);
     if (formatted !== lastShownTime) { $('run-time').innerHTML = formatted; lastShownTime = formatted; }
-    if (state.score !== lastShownScore) { $('score').textContent = String(state.score).padStart(2, '0'); lastShownScore = state.score; }
-    const boardFull = state.tiles.every(Boolean);
-    $('next-label').textContent = boardFull ? 'Grid full · clear a tile' : 'Next little challenge';
-    $('next-count').textContent = state.status === 'ended' ? '' : boardFull ? '8 / 8' : `${(state.nextSpawnInMs / 1000).toFixed(1)}s`;
-    $('spawn-fill').style.width = `${boardFull ? 100 : 100 * (1 - state.nextSpawnInMs / spawnInterval)}%`;
+    if (state.score !== lastShownScore) { $('score').textContent = String(state.score); $('score').setAttribute('aria-label', `${state.score} cleared`); lastShownScore = state.score; }
     cells.forEach((cell, slot) => {
-      const tile = state.tiles[slot];
-      let view = views.get(slot);
-      if (!tile && view?.type === 'break' && (flashes.get(slot) || 0) > now) {
-        cell.classList.remove('urgent');
-        cell.classList.add('geode-cleared');
-        cell.setAttribute('aria-label', 'Geode opened. Challenge cleared.');
-        view.timer.hidden = true;
-        return;
-      }
+      const tile = state.tiles[slot]; let view = views.get(slot);
+      if (!tile && view?.type === 'break' && (flashes.get(slot) || 0) > now) { cell.classList.remove('urgent'); cell.classList.add('geode-cleared'); cell.setAttribute('aria-label', 'Geode opened. Challenge cleared.'); view.timer.hidden = true; return; }
       if (view && (!tile || view.id !== tile.id)) { view.api.destroy(); views.delete(slot); view = null; }
       if (!tile) {
         if ((flashes.get(slot) || 0) > now) {
-          if (cell.dataset.view !== 'completed') {
-            cell.className = 'tile completed'; cell.dataset.view = 'completed';
-            cell.removeAttribute('data-game'); cell.removeAttribute('data-tile-id');
-            cell.setAttribute('aria-label', 'Challenge cleared');
-            cell.innerHTML = '<div class="complete-flash"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m7 16 6 6L26 9"/></svg><span>nicely done.</span></div>';
-          }
+          if (cell.dataset.view !== 'completed') { cell.className = 'tile completed'; cell.dataset.view = 'completed'; cell.removeAttribute('data-game'); cell.removeAttribute('data-tile-id'); cell.setAttribute('aria-label', 'Challenge cleared'); cell.innerHTML = '<div class="complete-flash"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m7 16 6 6L26 9"/></svg></div>'; }
         } else if (cell.dataset.view !== 'empty') emptyCell(cell, slot);
         return;
       }
-      if (!view) { mountTile(cell, catalog.find(game => game.id === tile.type), tile, false); view = views.get(slot); }
-      view.arc.style.strokeDashoffset = String(56.5487 * (1 - tile.remainingMs / lifetime));
+      if (!view) { mountTile(cell, catalog.find(game => game.id === tile.type), tile); view = views.get(slot); }
+      view.fill.setAttribute('d', piePath(tile.remainingMs / lifetime));
       const seconds = Math.ceil(tile.remainingMs / 1000);
-      if (view.lastSeconds !== seconds) {
-        view.number.textContent = seconds;
-        view.timer.setAttribute('aria-label', `${seconds} seconds remaining`);
-        view.lastSeconds = seconds;
-      }
-      cell.classList.toggle('urgent', tile.remainingMs <= 4000);
-      cell.classList.toggle('expired', tile.id === state.expiredTileId);
+      if (seconds !== view.lastSeconds) { view.timer.setAttribute('aria-label', `${seconds} seconds remaining`); view.lastSeconds = seconds; }
+      cell.classList.toggle('urgent', tile.remainingMs <= 4000); cell.classList.toggle('expired', tile.id === state.expiredTileId);
       if (state.status === 'running') view.api.tick(lifetime - tile.remainingMs, delta);
     });
     $('pause-button').disabled = state.status !== 'running';
   }
   function frame(now) {
-    const delta = Math.min(100, Math.max(0, now - lastFrame));
-    lastFrame = now;
-    if (!playingDemo) {
-      const state = engine.tick(now);
-      render(state, now, delta);
-    }
+    const delta = Math.min(100, Math.max(0, now - lastFrame)); lastFrame = now;
+    if (!atHome) render(engine.tick(now), now, delta);
+    else if (records.daily.date !== localDay()) renderRecords();
     requestAnimationFrame(frame);
   }
   function openDialog(kind, content) {
-    modalKind = kind;
-    habitat.update(engine.snapshot(performance.now()).elapsedMs, false);
-    board.setAttribute('inert', '');
-    $('dialog-content').innerHTML = content;
-    if (!dialog.open) dialog.showModal();
+    modalKind = kind; habitat.update(engine.snapshot(performance.now()).elapsedMs, false); board.setAttribute('inert', '');
+    $('dialog-content').innerHTML = content; if (!dialog.open) dialog.showModal();
   }
-  function closeDialog() {
-    if (dialog.open) dialog.close();
-    modalKind = '';
-    board.removeAttribute('inert');
-  }
-  function resumeRun() {
-    closeDialog();
-    initAudio();
-    lastFrame = performance.now();
-    engine.resume(lastFrame);
-    render(engine.snapshot(lastFrame), lastFrame, 0);
+  function closeDialog() { if (dialog.open) dialog.close(); modalKind = ''; board.removeAttribute('inert'); }
+  function resumeRun() { closeDialog(); initAudio(); lastFrame = performance.now(); engine.resume(lastFrame); render(engine.snapshot(lastFrame), lastFrame, 0); }
+  function showPauseMenu() {
+    openDialog('pause', `<div class="dialog-eyebrow">A LITTLE BREATHER</div><h2 id="dialog-title">Paused.</h2><p>The rush can wait.</p><button class="primary-button" data-action="resume">Keep playing</button><div class="pause-options"><button class="menu-option" data-action="sound" aria-pressed="${soundEnabled}">Sound ${soundEnabled ? 'on' : 'off'}</button><button class="menu-option" data-action="help">How to play</button></div><button class="secondary-button" data-action="restart">Start again</button><button class="quiet-button" data-action="home">Title screen</button>`);
   }
   function pauseRun() {
-    if (playingDemo || engine.status !== 'running') return;
-    if (!engine.pause(performance.now())) return;
-    updateBest(engine.snapshot(performance.now()).elapsedMs);
-    openDialog('pause', '<div class="dialog-icon" aria-hidden="true">Ⅱ</div><div class="dialog-eyebrow">A LITTLE BREATHER</div><h2 id="dialog-title">Take your time.</h2><p>Everything is right where you left it.<br>Your timers are paused.</p><button class="primary-button" data-action="resume">Back to the rush <span aria-hidden="true">↗</span></button><button class="secondary-button" data-action="restart">Start a fresh run</button><button class="quiet-button" data-action="home">Back to the beginning</button>');
+    if (atHome || engine.status !== 'running' || !engine.pause(performance.now())) return;
+    updateRecords(engine.snapshot(performance.now())); showPauseMenu();
   }
   function showHelp() {
-    const resume = engine.status === 'running' && !playingDemo;
-    if (resume && !engine.pause(performance.now())) return;
-    openDialog('help', `<div class="dialog-eyebrow">A SMALL GUIDE TO THE RUSH</div><h2 id="dialog-title">Keep the grid happy.</h2><div class="help-steps"><div class="help-step"><span>2.5</span><p><strong>A new game every 2.5 seconds.</strong>It lands in a random empty square; a full grid waits.</p></div><div class="help-step"><span>25</span><p><strong>25 seconds to clear each tile.</strong>Follow its prompt. The little ring is its timer.</p></div><div class="help-step"><span>01</span><p><strong>One missed tile ends your run.</strong>Switch between tiles in any order.</p></div></div><p class="help-note">The first Break is a hatch: wait for the chrysalis, then tap.<br>Drag nectar from Feed tiles to your new butterfly.<br>Only the clock ends a run. Pause any time.</p><button class="primary-button" data-action="${resume ? 'resume' : 'close'}">Got it. Let’s go <span aria-hidden="true">↗</span></button>`);
+    openDialog('help', '<div class="dialog-eyebrow">HOW TO PLAY</div><h2 id="dialog-title">Keep up.</h2><ul class="help-steps"><li>A new tile every 2.5 seconds.</li><li>Clear each within 25 seconds. Its filled circle counts down.</li><li>One empty circle ends the run.</li><li>Switch between tiles in any order.</li><li>Wait for the chrysalis, then tap. Drag nectar to the butterfly.</li></ul><div class="category-key"><span><i style="background:var(--butter)"></i>Numbers</span><span><i style="background:var(--lavender)"></i>Memory</span><span><i style="background:var(--blue)"></i>Spatial</span><span><i style="background:var(--sage)"></i>Precision</span><span><i style="background:var(--peach)"></i>Nature & time</span></div><button class="primary-button" data-action="back-pause">Back to pause</button>');
   }
   function showResult(tile, state) {
-    const game = catalog.find(item => item.id === tile.type);
-    const record = state.elapsedMs > bestAtStart;
-    openDialog('result', `<div class="dialog-icon" aria-hidden="true" style="background:var(--peach)">✳</div><div class="dialog-eyebrow">${record ? 'A NEW PERSONAL BEST' : 'A LITTLE CHAOS, WELL PLAYED'}</div><h2 id="dialog-title">That was a rush.</h2><p>The ${game.title.toLowerCase()} tile ran out of time.<br>There’s always one more round.</p><div class="result-stats"><div class="result-stat"><strong>${timeText(state.elapsedMs)}</strong><span>TIME SURVIVED</span></div><div class="result-stat"><strong>${state.score}</strong><span>GAMES CLEARED</span></div></div><button class="primary-button" data-action="restart">One more round <span aria-hidden="true">↗</span></button><button class="quiet-button" data-action="home">Back to the beginning</button>`);
+    const game = catalog.find(item => item.id === tile.type), record = state.elapsedMs > bestAtStart || state.score > scoreAtStart;
+    openDialog('result', `<div class="dialog-eyebrow">${record ? 'A NEW PERSONAL BEST' : 'ONE LITTLE TILE TOO LATE'}</div><h2 id="dialog-title">That was a rush.</h2><p>${game.title.toLowerCase()} ran out of time.</p><div class="result-stats"><div class="result-stat"><strong>${timeText(state.elapsedMs)}</strong><span>TIME</span></div><div class="result-stat"><strong>${state.score}</strong><span>CLEARED</span></div></div><button class="primary-button" data-action="restart">One more round</button><button class="quiet-button" data-action="home">Title screen</button>`);
     announce(`Run over. ${timeText(state.elapsedMs)} survived. ${state.score} games cleared.`);
   }
-  $('start-button').addEventListener('click', startRun);
-  $('pause-button').addEventListener('click', pauseRun);
-  $('desktop-help').addEventListener('click', showHelp);
-  $('mobile-help').addEventListener('click', showHelp);
-  $('sound-button').addEventListener('click', () => {
-    soundEnabled = !soundEnabled;
-    save('little-rush-sound', soundEnabled ? 'on' : 'off');
-    syncSound(); initAudio(); if (soundEnabled) tone(660, 0, .1);
-  });
-  function syncSound() {
-    $('sound-button').classList.toggle('sound-on', soundEnabled);
-    $('sound-button').setAttribute('aria-pressed', String(soundEnabled));
-    $('sound-button').setAttribute('aria-label', `Turn sound ${soundEnabled ? 'off' : 'on'}`);
+  function saveTweaks() { save('little-rush-disabled-games-v1', JSON.stringify([...disabledGames])); syncStart(); }
+  function showTweaks(tab = tweaksTab) {
+    tweaksTab = tab;
+    const toggles = catalog.map(game => `<label class="game-toggle"><span><i style="background:var(--${game.color})" aria-hidden="true"></i>${game.title}</span><input type="checkbox" data-game-toggle="${game.id}" aria-label="Allow ${game.title}" ${disabledGames.has(game.id) ? '' : 'checked'} ${game.id === 'feed' && disabledGames.has('press') ? 'disabled' : ''}></label>`).join('');
+    const tabs = `<div class="tweaks-tabs" role="tablist" aria-label="Tweaks sections"><button id="games-tab" role="tab" data-action="games-tab" aria-controls="games-panel" aria-selected="${tab === 'games'}" tabindex="${tab === 'games' ? 0 : -1}">Micro-games</button><button id="styles-tab" role="tab" data-action="styles-tab" aria-controls="styles-panel" aria-selected="${tab === 'styles'}" tabindex="${tab === 'styles' ? 0 : -1}">Styles</button></div>`;
+    const gamesPanel = `<section id="games-panel" role="tabpanel" aria-labelledby="games-tab" ${tab === 'games' ? '' : 'hidden'}><p class="tweaks-note">Choose what appears in your next run.</p><div class="tweak-presets"><button data-action="all-on">All on</button><button data-action="all-off">All off</button></div><div class="game-toggles">${toggles}</div><p class="tweak-status">${canStart() ? 'Feed needs Wait & Hatch. Choices are saved.' : 'Enable at least one repeatable game to play.'}</p></section>`;
+    const stylesPanel = `<section id="styles-panel" role="tabpanel" aria-labelledby="styles-tab" ${tab === 'styles' ? '' : 'hidden'}><p class="tweaks-note">A new feel for the whole game.</p><div class="theme-options" role="group" aria-label="Game style">${['flat', 'holofoil'].map(name => `<button class="theme-option ${name === selectedTheme ? 'is-selected' : ''}" data-action="theme-${name}" aria-pressed="${name === selectedTheme}"><span class="theme-preview theme-preview-${name}" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="theme-description"><strong>${name === 'flat' ? 'Flat' : 'Holofoil'}</strong><small>${name === 'flat' ? 'Soft colours. Simple little squares.' : 'Prismatic foil. A little shimmer.'}</small></span><span class="theme-check" aria-hidden="true">${name === selectedTheme ? '✓' : ''}</span></button>`).join('')}</div><p class="tweak-status">Style changes apply immediately and are saved.</p></section>`;
+    openDialog('tweaks', `<div class="dialog-eyebrow">MAKE IT YOURS</div><h2 id="dialog-title">Tweaks</h2>${tabs}${gamesPanel}${stylesPanel}<button class="primary-button" data-action="close">Done</button>`);
   }
+  $('start-button').addEventListener('click', startRun); $('pause-button').addEventListener('click', pauseRun); $('tweaks-button').addEventListener('click', () => {
+    showTweaks(); $('dialog-content').querySelector('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true });
+  });
   $('dialog-content').addEventListener('click', event => {
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'resume') resumeRun();
     if (action === 'restart') startRun();
     if (action === 'home') showHome();
     if (action === 'close') closeDialog();
+    if (action === 'help') showHelp();
+    if (action === 'back-pause') showPauseMenu();
+    if (action === 'games-tab' || action === 'styles-tab') { showTweaks(action === 'games-tab' ? 'games' : 'styles'); $('dialog-content').querySelector(`[data-action="${action}"]`)?.focus({ preventScroll: true }); }
+    if (action === 'theme-flat' || action === 'theme-holofoil') {
+      selectedTheme = action === 'theme-holofoil' ? 'holofoil' : 'flat'; save('little-rush-theme-v1', selectedTheme);
+      window.LittleRushTheme?.setTheme(selectedTheme); showTweaks('styles');
+      $('dialog-content').querySelector(`[data-action="${action}"]`)?.focus({ preventScroll: true });
+    }
+    if (action === 'sound') { soundEnabled = !soundEnabled; save('little-rush-sound', soundEnabled ? 'on' : 'off'); initAudio(); if (soundEnabled) tone(660, 0, .1); showPauseMenu(); }
+    if (action === 'all-on' || action === 'all-off') { disabledGames = new Set(action === 'all-on' ? [] : catalog.map(game => game.id)); saveTweaks(); showTweaks(); }
   });
-  dialog.addEventListener('cancel', event => {
+  $('dialog-content').addEventListener('change', event => {
+    const id = event.target.dataset.gameToggle;
+    if (!catalog.some(game => game.id === id) || modalKind !== 'tweaks') return;
+    if (id === 'feed' && disabledGames.has('press')) return;
+    if (event.target.checked) disabledGames.delete(id); else disabledGames.add(id);
+    if (disabledGames.has('press')) disabledGames.add('feed');
+    saveTweaks();
+    const feedToggle = $('dialog-content').querySelector('[data-game-toggle="feed"]');
+    if (feedToggle) { feedToggle.disabled = disabledGames.has('press'); feedToggle.checked = !disabledGames.has('feed'); }
+    const status = $('dialog-content').querySelector('.tweak-status');
+    if (status) status.textContent = canStart() ? 'Feed needs Wait & Hatch. Choices are saved.' : 'Enable at least one repeatable game to play.';
+  });
+  $('dialog-content').addEventListener('keydown', event => {
+    if (event.target.getAttribute('role') !== 'tab' || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    if (modalKind === 'pause' || (modalKind === 'help' && !playingDemo && engine.status === 'paused')) resumeRun();
-    else if (modalKind === 'help') closeDialog();
+    const tab = event.key === 'Home' ? 'games' : event.key === 'End' ? 'styles' : tweaksTab === 'games' ? 'styles' : 'games';
+    showTweaks(tab); $('dialog-content').querySelector(`[data-action="${tab}-tab"]`)?.focus({ preventScroll: true });
   });
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !dialog.open && !playingDemo && engine.status === 'running') { event.preventDefault(); pauseRun(); }
-  });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun(); });
+  dialog.addEventListener('cancel', event => { event.preventDefault(); if (modalKind === 'pause') resumeRun(); else if (modalKind === 'help') showPauseMenu(); else if (modalKind === 'tweaks') closeDialog(); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && !dialog.open && !atHome && engine.status === 'running') { event.preventDefault(); pauseRun(); } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun(); else if (atHome) renderRecords(); });
   window.addEventListener('blur', () => { if (!dialog.open) pauseRun(); });
-  window.addEventListener('pagehide', () => {
-    if (!playingDemo) updateBest(engine.snapshot(performance.now()).elapsedMs);
-  });
-  syncSound();
-  showHome();
-  requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => { if (!atHome) { if (engine.status === 'running') engine.pause(performance.now()); updateRecords(engine.snapshot(performance.now())); } });
+  window.LittleRushTheme?.setTheme(selectedTheme);
+  showHome(); requestAnimationFrame(frame);
 })();

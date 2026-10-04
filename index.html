@@ -1,78 +1,53 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f5f4ec">
-  <meta name="description" content="Eight little squares. Twenty-one tiny games. A new challenge every 2.5 seconds. How long can you keep up?">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>little rush — a pocket-sized brain party</title>
-  <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="microgames.css">
-  <link rel="stylesheet" href="extra-games.css">
-  <link rel="stylesheet" href="butterfly.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f5f4ec">
+<meta name="description" content="Twenty-one tiny games. Eight little squares. Find your little rush.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>little rush</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="microgames.css">
+<link rel="stylesheet" href="extra-games.css">
+<link rel="stylesheet" href="butterfly.css">
+<link rel="stylesheet" href="theme.css">
 </head>
 <body>
-  <header class="site-header">
-    <a class="wordmark" href="./" aria-label="Little Rush home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>little rush<span class="brand-period">.</span></a>
-    <span class="header-caption">a pocket-sized brain party</span>
-    <button class="text-button" id="desktop-help">How to play <span aria-hidden="true">↗</span></button>
-  </header>
-
-  <main class="main-layout">
-    <section class="intro" aria-labelledby="intro-title">
-      <div class="eyebrow"><span class="status-dot"></span> SMALL GAMES. BIG FOCUS.</div>
-      <h1 id="intro-title">Find your<br>little <em>rush.</em><svg class="title-spark" viewBox="0 0 60 60" aria-hidden="true"><path d="M30 2v56M2 30h56M10 10l40 40M10 50l40-40"/></svg></h1>
-      <p class="intro-copy">A handful of tiny challenges.<br>A delightful test of keeping up.</p>
-      <div class="rules-row">
-        <div class="rule"><span class="rule-number">2.5<span>s</span></span><p>A new game<br>joins the grid.</p></div>
-        <span class="rule-divider"></span>
-        <div class="rule"><span class="rule-number">25<span>s</span></span><p>Clear each one<br>before time’s up.</p></div>
+<main>
+  <section class="home-screen" id="home-screen" aria-labelledby="home-title">
+    <div class="home-content">
+      <div class="home-art" aria-hidden="true"><i></i><i></i><i></i><i></i><span>✦</span></div>
+      <p class="home-eyebrow">A POCKET-SIZED BRAIN PARTY</p>
+      <h1 id="home-title">little rush<span>.</span></h1>
+      <p class="home-tagline">A little focus. A little chaos.</p>
+      <div class="home-records">
+        <section class="record-card"><h2>All-time best</h2><div class="record-values"><div><strong id="alltime-time">00:00</strong><span>time</span></div><div><strong id="alltime-score">0</strong><span>cleared</span></div></div></section>
+        <section class="record-card today-card"><h2>Today's best <span class="today-dot" aria-hidden="true"></span></h2><div class="record-values"><div><strong id="today-time">00:00</strong><span>time</span></div><div><strong id="today-score">0</strong><span>cleared</span></div></div></section>
       </div>
-      <p class="one-rule"><span aria-hidden="true">✳</span> Miss one, and the rush is over.</p>
-      <div class="intro-bottom"><span class="mini-grid" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>Stay curious. Stay quick.<br><strong>Just one more round.</strong></span><svg class="hand-arrow" viewBox="0 0 110 60" aria-hidden="true"><path d="M3 14c25 40 55 42 89 9M78 23l16-5-2 17"/></svg></div>
-    </section>
-
-    <section class="app-shell" aria-label="Little Rush game">
-      <header class="game-header">
-        <div class="game-brand">little rush<span>.</span><span class="edition">THE DAILY DOSE OF PLAY</span></div>
-        <div class="game-controls">
-          <button class="icon-button" id="sound-button" aria-label="Turn sound on" aria-pressed="false" title="Sound"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path class="sound-waves" d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/><path class="sound-slash" d="m16 9 5 6m0-6-5 6"/></svg></button>
-          <button class="icon-button" id="pause-button" aria-label="Pause game" title="Pause" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
-          <button class="icon-button mobile-help" id="mobile-help" aria-label="How to play"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 0 1 6 0c0 2-3 2-3 4m0 3v.2"/></svg></button>
-        </div>
-      </header>
-
-      <div class="scoreboard">
-        <div class="time-stat"><span class="stat-label"><span class="live-dot"></span> RUN TIME</span><span class="time-value" id="run-time">00:00<span>.0</span></span></div>
-        <div class="small-stat"><span class="stat-label">CLEARED</span><span id="score">00</span></div>
-        <div class="small-stat best-stat"><span class="stat-label">BEST</span><span id="best-time">00:00</span></div>
-      </div>
-
-      <div class="board-wrap"><div class="game-board" id="game-board" aria-label="Game board, two columns and four rows"></div></div>
-
-      <div class="game-footer" id="game-footer">
-        <div class="next-game" id="next-game"><span><span class="tiny-spark">✳</span> <span id="next-label">Eight squares. Endless little possibilities.</span></span><span id="next-count"></span></div>
-        <div class="spawn-track" id="spawn-track" hidden><span id="spawn-fill"></span></div>
-        <button class="primary-button start-button" id="start-button">Let’s play <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
-        <p class="start-note" id="start-note">Tap, think, repeat. How long can you last?</p>
-        <p class="play-note" id="play-note" hidden>Clear any tile. Keep the little rush alive.</p>
-      </div>
-      <div class="sr-only" id="announcer" aria-live="polite" aria-atomic="true"></div>
-    </section>
-  </main>
-
-  <footer class="site-footer"><span>MADE FOR YOUR IN-BETWEEN MOMENTS.</span><span>21 tiny games <span class="footer-dot">·</span> 8 little squares <span class="footer-dot">·</span> 1 busy brain</span></footer>
-
-  <dialog id="game-dialog" aria-labelledby="dialog-title">
-    <div class="dialog-inner" id="dialog-content"></div>
-  </dialog>
-  <noscript><p class="noscript">Please enable JavaScript to play Little Rush.</p></noscript>
-  <script src="engine.js"></script>
-  <script src="microgames.js"></script>
-  <script src="extra-games.js"></script>
-  <script src="butterfly.js"></script>
-  <script src="app.js"></script>
+      <button class="primary-button" id="start-button">Let's play <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+      <button class="quiet-button tweaks-button" id="tweaks-button">Tweaks</button>
+      <p class="home-note" id="home-note">Personal records, saved on this device.</p>
+    </div>
+  </section>
+  <section class="play-screen" id="play-screen" aria-label="Little Rush game" hidden>
+    <header class="game-hud">
+      <div class="hud-score" aria-label="Challenges cleared"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"/></svg><span id="score">0</span></div>
+      <div class="hud-time" id="run-time" role="timer" aria-label="Run time">00:00<span>.0</span></div>
+      <button class="icon-button" id="pause-button" aria-label="Pause game" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
+    </header>
+    <div class="board-wrap"><div class="game-board" id="game-board" aria-label="Game board, two columns and four rows"></div></div>
+  </section>
+  <div class="sr-only" id="announcer" aria-live="polite" aria-atomic="true"></div>
+</main>
+<dialog id="game-dialog" aria-labelledby="dialog-title"><div class="dialog-inner" id="dialog-content"></div></dialog>
+<noscript><p class="noscript">Please enable JavaScript to play Little Rush.</p></noscript>
+<script src="engine.js"></script>
+<script src="microgames.js"></script>
+<script src="extra-games.js"></script>
+<script src="butterfly.js"></script>
+<script src="theme.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

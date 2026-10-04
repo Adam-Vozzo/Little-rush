@@ -174,7 +174,13 @@ test('independent review: fast maze swipes stop at every intervening wall instea
       g.grid.fire('pointerdown', from);
       g.grid.fire('pointermove', { clientX: from.clientX + offsets[side][0] * 1000, clientY: from.clientY + offsets[side][1] * 1000 });
       assert.equal(g.current(), expected, `Wall skipped for seed ${seed}, direction ${side}`);
-      assert.equal(g.grid.captured, null);
+      assert.equal(g.grid.captured, g.completions ? null : 1);
+      if (!g.completions) {
+        g.grid.fire('pointermove', from);
+        assert.equal(g.current(), g.maze.start, 'A wall hit must allow recovery without lifting');
+        routeTo(g.maze).slice(1).forEach(cell => g.grid.fire('pointermove', g.at(cell)));
+        assert.equal(g.completions, 1, 'The same gesture should continue to the exit after a wall hit');
+      }
       g.destroy();
     }
   }
@@ -191,11 +197,29 @@ test('independent review: diagonal corner cuts and re-grabbing another cell cann
     g.grid.fire('pointerdown', g.at(g.maze.start));
     g.grid.fire('pointermove', g.at(diagonal));
     assert.equal(g.current(), g.maze.start);
-    assert.equal(g.grid.captured, null);
-    g.grid.fire('pointermove', g.at(g.maze.end));
+    assert.equal(g.grid.captured, 1);
     assert.equal(g.completions, 0);
+    g.grid.fire('pointermove', g.at(g.maze.start));
+    routeTo(g.maze).slice(1).forEach(cell => g.grid.fire('pointermove', g.at(cell)));
+    assert.equal(g.completions, 1);
     g.destroy();
   }
+});
+
+test('independent review: maze dot and trail move continuously within cells without jumping at grab time', () => {
+  const g = mazeGame(7), from = g.at(g.maze.start), dot = g.one('.ex-maze-dot'), ink = g.one('.ex-maze-ink');
+  const startX = Number(dot.getAttribute('cx')), startY = Number(dot.getAttribute('cy'));
+  const initialTrail = ink.getAttribute('d');
+  g.grid.fire('pointerdown', { clientX: from.clientX + 5, clientY: from.clientY });
+  assert.equal(Number(dot.getAttribute('cx')), startX);
+  g.grid.fire('pointermove', { clientX: from.clientX + 8, clientY: from.clientY + 2 });
+  assert.ok(Math.abs(Number(dot.getAttribute('cx')) - startX - .15) < 1e-9);
+  assert.ok(Math.abs(Number(dot.getAttribute('cy')) - startY - .1) < 1e-9);
+  assert.equal(g.current(), g.maze.start);
+  assert.notEqual(ink.getAttribute('d'), initialTrail);
+  g.grid.fire('pointerup');
+  assert.equal(g.grid.captured, null);
+  assert.equal(g.completions, 0);
 });
 
 test('independent review: maze cancellation preserves progress and requires the same dot to be grabbed again', () => {
@@ -263,20 +287,6 @@ test('independent review: 1000 pipe layouts begin unsolved and their intended ro
   assert.ok(layouts.size > 900, `Only ${layouts.size} unique pipe layouts`);
 });
 
-test('independent review: signatures vary while keeping ordered points safely inside the drawing area', () => {
-  const layouts = new Set();
-  for (let seed = 0; seed < 1000; seed++) {
-    const signature = puzzles.generateSignature(randomFor(seed));
-    assert.ok(signature.length >= 5 && signature.length <= 6);
-    signature.forEach(([x, y], index) => {
-      assert.ok(x >= 10 && x <= 110 && y >= 20 && y <= 65);
-      if (index > 0) assert.ok(x > signature[index - 1][0]);
-    });
-    layouts.add(JSON.stringify(signature));
-  }
-  assert.ok(layouts.size > 900, `Only ${layouts.size} unique signatures`);
-});
-
 test('independent review: generated level targets are reachable and never begin near completion', () => {
   for (let seed = 0; seed < 1000; seed++) {
     const levels = puzzles.generateLevels(randomFor(seed));
@@ -291,36 +301,74 @@ test('independent review: generated level targets are reachable and never begin 
   assert.equal(new Set(puzzles.words).size, puzzles.words.length);
 });
 
-test('independent review: 200 signatures accept their actual continuous paths', () => {
+test('independent review: 200 arbitrary signatures accept free strokes only when the owner releases', () => {
   for (let seed = 0; seed < 200; seed++) {
-    const signature = puzzles.generateSignature(randomFor(seed));
     const g = game('sign', seed), paper = g.one('.ex-sign-paper');
-    paper.fire('pointerdown', pointerAt(signature[0]));
-    signature.slice(1).forEach(point => paper.fire('pointermove', pointerAt(point)));
-    assert.equal(g.completions, 1, `Valid signature rejected for seed ${seed}`);
+    paper.getBoundingClientRect = () => ({ left: 0, top: 0, width: 160, height: 100 });
+    const random = randomFor(seed);
+    const from = [10 + random() * 25, 10 + random() * 80], to = [150, 10 + random() * 80];
+    assert.equal(g.one('.ex-sign-guide'), null);
+    paper.fire('pointerdown', pointerAt(from));
+    paper.fire('pointermove', pointerAt(to));
+    assert.equal(g.completions, 0, 'A signature must not complete while the finger is held');
+    paper.fire('pointerup', pointerAt(to));
+    assert.equal(g.completions, 1, `Free signature rejected for seed ${seed}`);
     assert.equal(paper.captured, null);
     g.destroy();
   }
 });
 
-test('independent review: signature taps, broken strokes, off-guide paths, and a second finger cannot bypass tracing', () => {
-  const signature = puzzles.generateSignature(randomFor(7));
-  const g = game('sign', 7), paper = g.one('.ex-sign-paper');
-  for (const point of signature) {
-    paper.fire('pointerdown', pointerAt(point)); paper.fire('pointerup');
+test('independent review: taps, tiny jitter, and separately short signatures cannot bypass meaningful drawing', () => {
+  const g = game('sign'), paper = g.one('.ex-sign-paper');
+  paper.getBoundingClientRect = () => ({ left: 0, top: 0, width: 160, height: 100 });
+  paper.fire('click'); paper.fire('pointerdown', pointerAt([80, 50])); paper.fire('pointerup', pointerAt([80, 50]));
+  assert.equal(g.completions, 0);
+  paper.fire('pointerdown', pointerAt([80, 50]));
+  for (let i = 0; i < 100; i++) paper.fire('pointermove', pointerAt([80 + (i % 2 ? -2 : 2), 50]));
+  paper.fire('pointerup', pointerAt([80, 50]));
+  assert.equal(g.completions, 0);
+  for (let i = 0; i < 3; i++) {
+    paper.fire('pointerdown', pointerAt([20, 50])); paper.fire('pointermove', pointerAt([75, 50])); paper.fire('pointerup', pointerAt([75, 50]));
   }
   assert.equal(g.completions, 0);
-  paper.fire('pointerdown', pointerAt(signature[0]));
-  paper.fire('pointermove', pointerAt([60, 0]));
-  signature.slice(1).forEach(point => paper.fire('pointermove', pointerAt(point)));
-  paper.fire('pointerup');
-  assert.equal(g.completions, 0);
-  paper.fire('pointerdown', pointerAt(signature[0]));
-  paper.fire('pointermove', { ...pointerAt(signature.at(-1)), pointerId: 2 });
-  paper.fire('pointerup', { pointerId: 2 });
+});
+
+test('independent review: signature ownership blocks another finger and Enter from completing a held stroke', () => {
+  const g = game('sign'), paper = g.one('.ex-sign-paper');
+  paper.getBoundingClientRect = () => ({ left: 0, top: 0, width: 160, height: 100 });
+  paper.fire('pointerdown', pointerAt([10, 60]));
+  paper.fire('pointermove', { ...pointerAt([150, 30]), pointerId: 2 });
+  paper.fire('pointerup', { ...pointerAt([150, 30]), pointerId: 2 });
+  paper.fire('pointercancel', { pointerId: 2 });
+  paper.fire('keydown', { key: 'Enter' });
   assert.equal(g.completions, 0);
   assert.equal(paper.captured, 1);
-  signature.slice(1).forEach(point => paper.fire('pointermove', pointerAt(point)));
+  paper.fire('pointermove', pointerAt([150, 30])); paper.fire('pointerup', pointerAt([150, 30]));
+  assert.equal(g.completions, 1);
+});
+
+test('independent review: canceled or out-of-box signatures reset before a new valid stroke', () => {
+  for (const cancellation of ['pointercancel', 'lostpointercapture', 'outside']) {
+    const g = game('sign'), paper = g.one('.ex-sign-paper');
+    paper.getBoundingClientRect = () => ({ left: 0, top: 0, width: 160, height: 100 });
+    paper.fire('pointerdown', pointerAt([10, 60])); paper.fire('pointermove', pointerAt([150, 30]));
+    if (cancellation === 'outside') {
+      paper.fire('pointermove', { ...pointerAt([140, 60]), getCoalescedEvents: () => [pointerAt([170, 60]), pointerAt([140, 60])] });
+    } else paper.fire(cancellation);
+    paper.fire('pointerup', pointerAt([150, 30]));
+    assert.equal(g.completions, 0, cancellation);
+    assert.equal(paper.captured, null, cancellation);
+    assert.equal(g.one('.ex-sign-ink').getAttribute('d'), '', cancellation);
+    paper.fire('pointerdown', pointerAt([10, 40])); paper.fire('pointermove', pointerAt([150, 70])); paper.fire('pointerup', pointerAt([150, 70]));
+    assert.equal(g.completions, 1, cancellation);
+  }
+});
+
+test('independent review: free signature keyboard fallback requires a fresh Enter press', () => {
+  const g = game('sign'), paper = g.one('.ex-sign-paper');
+  paper.fire('keydown', { key: 'Enter', repeat: true }); paper.fire('click');
+  assert.equal(g.completions, 0);
+  paper.fire('keydown', { key: 'Enter', repeat: false });
   assert.equal(g.completions, 1);
 });
 

@@ -32,6 +32,7 @@ class Element {
       if (!tag) continue;
       const element = new Element(tag);
       for (const match of token.matchAll(/([\w-]+)="([^"]*)"/g)) element.setAttribute(match[1], match[2]);
+      for (const name of ['checked', 'disabled', 'hidden']) element[name] = new RegExp(`\\s${name}(?=[\\s/>])`).test(token);
       stack.at(-1).append(element);
       if (!token.endsWith('/>') && !['input', 'br', 'hr', 'img'].includes(tag)) stack.push(element);
     }
@@ -49,7 +50,9 @@ class Element {
   append(...elements) { for (const element of elements) { element.parentElement = this; this.children.push(element); } }
   remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(child => child !== this); this.parentElement = null; }
   querySelectorAll(selector) {
-    const matches = element => selector.startsWith('.') ? element.classList.contains(selector.slice(1)) : element.tagName === selector;
+    const attribute = selector.match(/^\[([\w-]+)(?:="([^"]*)")?\]$/);
+    const matches = element => attribute ? element.getAttribute(attribute[1]) !== null && (attribute[2] === undefined || element.getAttribute(attribute[1]) === attribute[2])
+      : selector.startsWith('.') ? element.classList.contains(selector.slice(1)) : element.tagName === selector;
     return this.children.flatMap(child => [...(matches(child) ? [child] : []), ...child.querySelectorAll(selector)]);
   }
   querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
@@ -77,12 +80,17 @@ class Element {
   }
 }
 
-function environment({ app = false, reducedMotion = false } = {}) {
+function environment({ app = false, reducedMotion = false, saved = {}, calendarTime = new Date(2026, 9, 5, 12).getTime() } = {}) {
   const body = new Element('body');
   const ids = new Map();
+  for (const match of fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8').matchAll(/\bid="([^"]+)"/g)) {
+    const element = new Element('div'); ids.set(match[1], element); body.append(element);
+  }
+  const documentListeners = new Map(), windowListeners = new Map();
   const document = {
-    body, createElement: tag => new Element(tag), addEventListener() {},
-    getElementById(id) { if (!ids.has(id)) { const element = new Element('div'); ids.set(id, element); body.append(element); } return ids.get(id); },
+    body, createElement: tag => new Element(tag),
+    addEventListener(name, handler) { if (!documentListeners.has(name)) documentListeners.set(name, new Set()); documentListeners.get(name).add(handler); },
+    getElementById(id) { return ids.get(id) ?? null; },
   };
   const board = document.getElementById('game-board');
   board.remove();
@@ -90,8 +98,11 @@ function environment({ app = false, reducedMotion = false } = {}) {
   let feedMount;
   const catalog = ['press', 'wires', 'switch', 'shapes', 'maze', 'level', 'break', 'connect', 'upload', 'hold'].map(id => ({ id, title: id.toUpperCase(), color: 'sage' }));
   const mounts = [];
+  const themeCalls = [];
   const window = {
-    matchMedia: () => ({ matches: reducedMotion }), addEventListener() {},
+    matchMedia: () => ({ matches: reducedMotion }),
+    addEventListener(name, handler) { if (!windowListeners.has(name)) windowListeners.set(name, new Set()); windowListeners.get(name).add(handler); },
+    LittleRushTheme: { setTheme(theme) { themeCalls.push(theme); } },
     LittleRushGames: {
       catalog,
       register(entries, mounter) { catalog.push(...entries); feedMount = mounter; },
@@ -103,8 +114,14 @@ function environment({ app = false, reducedMotion = false } = {}) {
     },
   };
   let now = 0, nextFrame, engine;
+  let wallTime = calendarTime;
+  const storage = new Map(Object.entries(saved).map(([key, value]) => [key, String(value)]));
+  class CalendarDate extends Date {
+    constructor(...args) { super(...(args.length ? args : [wallTime])); }
+    static now() { return wallTime; }
+  }
   window.LittleRushEngine = class extends Engine { constructor(options) { super({ ...options, random: () => 0 }); engine = this; } };
-  const context = vm.createContext({ window, document, performance: { now: () => now }, localStorage: { getItem() { return null; }, setItem() {} }, requestAnimationFrame: callback => { nextFrame = callback; } });
+  const context = vm.createContext({ window, document, Date: CalendarDate, performance: { now: () => now }, localStorage: { getItem(key) { return storage.get(key) ?? null; }, setItem(key, value) { storage.set(key, String(value)); } }, requestAnimationFrame: callback => { nextFrame = callback; } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../butterfly.js'), 'utf8'), context);
   let habitat;
   if (app) {
@@ -113,10 +130,18 @@ function environment({ app = false, reducedMotion = false } = {}) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8'), context);
   } else habitat = new window.LittleRushButterfly.Habitat(wrapper);
   const state = {
-    window, body, document, ids, board, wrapper, habitat, mounts,
+    window, body, document, ids, board, wrapper, habitat, mounts, storage, themeCalls,
     get engine() { return engine; },
     advance(time) { now = time; if (nextFrame) nextFrame(now); },
+    calendar(time) { wallTime = time; },
+    dispatchDocument(name, values = {}) { for (const handler of documentListeners.get(name) ?? []) handler({ preventDefault() {}, ...values }); },
+    dispatchWindow(name, values = {}) { for (const handler of windowListeners.get(name) ?? []) handler({ preventDefault() {}, ...values }); },
     action(action) { document.getElementById('dialog-content').dispatch('click', { target: { closest: () => ({ dataset: { action } }) } }); },
+    toggleGame(id, checked) {
+      const input = document.getElementById('dialog-content').querySelector(`[data-game-toggle="${id}"]`);
+      assert.ok(input, `Missing game toggle ${id}`); input.checked = checked;
+      document.getElementById('dialog-content').dispatch('change', { target: input });
+    },
     complete(type) { const game = mounts.find(m => !m.destroyed && !m.options.demo && m.type === type); assert.ok(game, `missing active ${type}`); game.options.onComplete(); },
     feed(options = {}) {
       const container = new Element('section'); board.append(container);
@@ -287,21 +312,30 @@ test('simultaneous tick completions do not remount cleared games from a stale re
   assert.equal(env.mounts.filter(m => !m.destroyed && !m.options.demo && ['upload', 'hold'].includes(m.type)).length, 0);
 });
 
-test('UI countdown and microgame age use the same 25-second lifetime', () => {
+test('filled pie countdown and microgame age use the same 25-second lifetime without timer digits', () => {
   const env = environment({app: true});
   env.document.getElementById('start-button').click();
   const hatch = env.mounts.find(m => m.type === 'press' && !m.options.demo);
-  assert.equal(env.board.querySelector('.tile-timer').getAttribute('aria-label'), '25 seconds remaining');
+  const timer = env.board.querySelector('.tile-timer'), fill = timer.querySelector('.timer-fill');
+  const full = fill.getAttribute('d');
+  assert.ok(full);
+  assert.equal(timer.querySelector('span'), null);
+  assert.equal(timer.querySelector('.timer-arc'), null);
+  assert.equal(timer.getAttribute('aria-label'), '25 seconds remaining');
   env.advance(1000);
   assert.equal(hatch.age, 1000);
   assert.equal(env.board.querySelector('.tile-timer').getAttribute('aria-label'), '24 seconds remaining');
+  assert.notEqual(fill.getAttribute('d'), full);
+  assert.match(fill.getAttribute('d'), /^M12 12L12 2A/);
   env.advance(17500);
   assert.equal(env.engine.snapshot(17500).tiles.filter(Boolean).length, 8);
-  assert.equal(env.document.getElementById('next-label').textContent, 'Grid full · clear a tile');
+  assert.equal(env.document.getElementById('next-label'), null);
+  assert.equal(env.document.getElementById('spawn-fill'), null);
   env.advance(24999);
   assert.equal(env.engine.status, 'running');
   env.advance(25000);
   assert.equal(env.engine.status, 'ended');
+  assert.equal(fill.getAttribute('d'), '');
 });
 
 test('geode reveal lasts 700ms while its engine slot is already free', () => {
@@ -328,4 +362,215 @@ test('a new scheduled spawn can replace the geode reveal immediately', () => {
   env.advance(5000);
   assert.equal(geode.destroyed, true);
   assert.equal(env.engine.snapshot(5000).tiles[1].type, 'wires');
+});
+
+test('title screen starts with records and no game previews, then exposes only the active play screen', () => {
+  const env = environment({ app: true });
+  assert.equal(env.document.getElementById('home-screen').hidden, false);
+  assert.equal(env.document.getElementById('play-screen').hidden, true);
+  assert.equal(env.mounts.length, 0);
+  assert.equal(env.board.querySelectorAll('.empty').length, 8);
+  for (const id of ['alltime-time', 'today-time']) assert.equal(env.document.getElementById(id).textContent, '00:00');
+  for (const id of ['alltime-score', 'today-score']) assert.equal(env.document.getElementById(id).textContent, '0');
+  for (const id of ['best-time', 'next-game', 'next-label', 'next-count', 'spawn-fill', 'game-footer', 'desktop-help', 'sound-button']) assert.equal(env.document.getElementById(id), null);
+  env.document.getElementById('start-button').click();
+  assert.equal(env.document.getElementById('home-screen').hidden, true);
+  assert.equal(env.document.getElementById('play-screen').hidden, false);
+  assert.equal(env.mounts.length, 1);
+  assert.equal(env.document.getElementById('score').textContent, '0');
+});
+
+test('pause menu exposes help and sound, keeps the clock frozen, and returns cleanly to the title', () => {
+  const env = environment({ app: true });
+  env.document.getElementById('start-button').click(); env.advance(2000);
+  const pie = env.board.querySelector('.timer-fill').getAttribute('d');
+  env.document.getElementById('pause-button').click();
+  assert.equal(env.engine.status, 'paused'); assert.equal(env.board.getAttribute('inert'), '');
+  env.action('help'); env.advance(9000);
+  assert.equal(env.engine.snapshot(9000).elapsedMs, 2000);
+  assert.equal(env.board.querySelector('.timer-fill').getAttribute('d'), pie);
+  env.action('back-pause');
+  assert.equal(env.engine.status, 'paused');
+  env.action('sound'); assert.equal(env.storage.get('little-rush-sound'), 'on');
+  env.action('resume');
+  assert.equal(env.engine.status, 'running'); assert.equal(env.board.getAttribute('inert'), null);
+  env.advance(10000); assert.equal(env.engine.snapshot(10000).elapsedMs, 3000);
+  env.document.getElementById('pause-button').click(); env.action('home');
+  assert.equal(env.document.getElementById('home-screen').hidden, false);
+  assert.equal(env.document.getElementById('play-screen').hidden, true);
+  assert.ok(env.mounts.every(mount => mount.destroyed));
+});
+
+test('records preserve independent time and score maxima for all-time and the current local day', () => {
+  const key = 'little-rush-records-v1';
+  const env = environment({ app: true, saved: { [key]: JSON.stringify({
+    allTime: { timeMs: 90000, score: 0 }, daily: { date: '2026-10-05', timeMs: 20000, score: 5 }
+  }) } });
+  env.document.getElementById('start-button').click(); env.advance(3000); env.complete('press'); env.advance(27500);
+  const saved = JSON.parse(env.storage.get(key));
+  assert.deepEqual(saved.allTime, { timeMs: 90000, score: 1 });
+  assert.deepEqual(saved.daily, { date: '2026-10-05', timeMs: 27500, score: 5 });
+  env.action('home');
+  assert.equal(env.document.getElementById('alltime-time').textContent, '01:30');
+  assert.equal(env.document.getElementById('alltime-score').textContent, '1');
+  assert.equal(env.document.getElementById('today-time').textContent, '00:27');
+  assert.equal(env.document.getElementById('today-score').textContent, '5');
+  const restored = environment({ app: true, saved: Object.fromEntries(env.storage) });
+  assert.equal(restored.document.getElementById('alltime-score').textContent, '1');
+  assert.equal(restored.document.getElementById('today-time').textContent, '00:27');
+});
+
+test('legacy best time migrates and malformed, negative, or non-finite records cannot corrupt title statistics', () => {
+  for (const value of ['not-json', JSON.stringify({ allTime: { timeMs: -50, score: 'Infinity' }, daily: { date: '2026-10-05', timeMs: 'NaN', score: -4 } })]) {
+    const env = environment({ app: true, saved: { 'little-rush-records-v1': value, 'little-rush-best-v3': '120000' } });
+    assert.equal(env.document.getElementById('alltime-time').textContent, '02:00');
+    assert.equal(env.document.getElementById('alltime-score').textContent, '0');
+    assert.equal(env.document.getElementById('today-time').textContent, '00:00');
+    assert.equal(env.document.getElementById('today-score').textContent, '0');
+  }
+});
+
+test('daily records reset at local midnight while title is open and when the page becomes visible', () => {
+  const key = 'little-rush-records-v1';
+  const env = environment({ app: true, saved: { [key]: JSON.stringify({ allTime: { timeMs: 45000, score: 9 }, daily: { date: '2026-10-05', timeMs: 30000, score: 4 } }) } });
+  env.calendar(new Date(2026, 9, 6, 0, 0, 1).getTime()); env.advance(16);
+  let saved = JSON.parse(env.storage.get(key));
+  assert.deepEqual(saved.daily, { date: '2026-10-06', timeMs: 0, score: 0 });
+  assert.deepEqual(saved.allTime, { timeMs: 45000, score: 9 });
+  assert.equal(env.document.getElementById('today-time').textContent, '00:00');
+  assert.equal(env.document.getElementById('today-score').textContent, '0');
+  env.calendar(new Date(2026, 9, 7, 0, 0, 1).getTime()); env.document.hidden = false; env.dispatchDocument('visibilitychange');
+  saved = JSON.parse(env.storage.get(key));
+  assert.equal(saved.daily.date, '2026-10-07');
+});
+
+test('pausing, restarting, and pagehide save active progress without counting hidden time', () => {
+  const key = 'little-rush-records-v1';
+  const env = environment({ app: true });
+  env.document.getElementById('start-button').click(); env.advance(3000); env.complete('press');
+  env.dispatchWindow('pagehide');
+  assert.equal(env.engine.status, 'paused');
+  assert.deepEqual(JSON.parse(env.storage.get(key)).daily, { date: '2026-10-05', timeMs: 3000, score: 1 });
+  env.advance(100000);
+  assert.equal(JSON.parse(env.storage.get(key)).allTime.timeMs, 3000);
+  env.action('restart'); env.advance(101000); env.document.getElementById('pause-button').click();
+  assert.deepEqual(JSON.parse(env.storage.get(key)).allTime, { timeMs: 3000, score: 1 });
+});
+
+test('Tweaks persists checkbox choices, blocks an empty catalog, and supports a single repeatable game', () => {
+  const key = 'little-rush-disabled-games-v1';
+  const env = environment({ app: true });
+  env.document.getElementById('tweaks-button').click(); env.action('all-off');
+  assert.equal(env.document.getElementById('start-button').disabled, true);
+  env.action('close'); env.document.getElementById('start-button').click();
+  assert.equal(env.engine.status, 'idle');
+  env.document.getElementById('tweaks-button').click(); env.toggleGame('switch', true); env.action('close');
+  assert.equal(env.document.getElementById('start-button').disabled, false);
+  const saved = JSON.parse(env.storage.get(key));
+  assert.ok(saved.includes('press') && saved.includes('feed')); assert.equal(saved.includes('switch'), false);
+  env.document.getElementById('start-button').click(); env.advance(2500);
+  assert.deepEqual(env.engine.snapshot(2500).tiles.filter(Boolean).map(tile => tile.type), ['switch', 'switch']);
+  const restored = environment({ app: true, saved: Object.fromEntries(env.storage) });
+  restored.document.getElementById('start-button').click();
+  assert.equal(restored.engine.snapshot(0).tiles.find(Boolean).type, 'switch');
+});
+
+test('Tweaks enforces the Hatch dependency for Feed and prevents Hatch-only runs', () => {
+  const env = environment({ app: true });
+  env.document.getElementById('tweaks-button').click(); env.action('all-off');
+  let feed = env.document.getElementById('dialog-content').querySelector('[data-game-toggle="feed"]');
+  assert.equal(feed.disabled, true); assert.equal(feed.checked, false);
+  env.toggleGame('feed', true);
+  assert.equal(env.document.getElementById('start-button').disabled, true);
+  env.toggleGame('press', true);
+  assert.equal(feed.disabled, false); assert.equal(env.document.getElementById('start-button').disabled, true);
+  env.toggleGame('feed', true);
+  assert.equal(env.document.getElementById('start-button').disabled, false);
+  env.toggleGame('press', false);
+  assert.equal(feed.disabled, true); assert.equal(feed.checked, false);
+  assert.ok(JSON.parse(env.storage.get('little-rush-disabled-games-v1')).includes('feed'));
+  env.action('all-on');
+  assert.deepEqual(JSON.parse(env.storage.get('little-rush-disabled-games-v1')), []);
+  assert.equal(env.document.getElementById('start-button').disabled, false);
+});
+
+test('Tweaks ignores malformed saved catalogs and unknown IDs without disabling legitimate games', () => {
+  for (const saved of ['{bad', '{"press":false}', '["unknown-game"]']) {
+    const env = environment({ app: true, saved: { 'little-rush-disabled-games-v1': saved } });
+    assert.equal(env.document.getElementById('start-button').disabled, false);
+    env.document.getElementById('start-button').click();
+    assert.equal(env.engine.snapshot(0).tiles.find(Boolean).type, 'press');
+  }
+});
+
+test('Styles applies Flat by default and switching to Holofoil preserves game choices across tabs', () => {
+  const env = environment({ app: true });
+  const dialog = env.document.getElementById('dialog-content');
+  assert.deepEqual(env.themeCalls, ['flat']);
+  env.document.getElementById('tweaks-button').click(); env.toggleGame('switch', false);
+  const gameChoices = env.storage.get('little-rush-disabled-games-v1');
+  env.action('styles-tab');
+  assert.equal(dialog.querySelector('[id="styles-panel"]').hidden, false);
+  assert.equal(dialog.querySelector('[id="games-panel"]').hidden, true);
+  assert.equal(dialog.querySelector('[data-action="theme-flat"]').getAttribute('aria-pressed'), 'true');
+  env.action('theme-holofoil');
+  assert.deepEqual(env.themeCalls, ['flat', 'holofoil']);
+  assert.equal(env.storage.get('little-rush-theme-v1'), 'holofoil');
+  assert.equal(dialog.querySelector('[data-action="theme-holofoil"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(dialog.querySelector('[data-action="theme-flat"]').getAttribute('aria-pressed'), 'false');
+  assert.equal(dialog.querySelector('[data-action="styles-tab"]').getAttribute('aria-selected'), 'true');
+  assert.equal(env.storage.get('little-rush-disabled-games-v1'), gameChoices);
+  env.action('games-tab');
+  assert.equal(dialog.querySelector('[data-game-toggle="switch"]').checked, false);
+  assert.equal(dialog.querySelector('[id="styles-panel"]').hidden, true);
+  assert.equal(dialog.querySelector('[id="games-panel"]').hidden, false);
+});
+
+test('selected style restores after reload and can persistently switch back to Flat', () => {
+  const env = environment({ app: true, saved: { 'little-rush-theme-v1': 'holofoil', 'little-rush-disabled-games-v1': '["switch"]' } });
+  assert.deepEqual(env.themeCalls, ['holofoil']);
+  env.document.getElementById('tweaks-button').click(); env.action('styles-tab');
+  assert.equal(env.document.getElementById('dialog-content').querySelector('[data-action="theme-holofoil"]').getAttribute('aria-pressed'), 'true');
+  env.action('theme-flat');
+  assert.deepEqual(env.themeCalls, ['holofoil', 'flat']);
+  const restored = environment({ app: true, saved: Object.fromEntries(env.storage) });
+  assert.deepEqual(restored.themeCalls, ['flat']);
+  assert.equal(restored.storage.get('little-rush-disabled-games-v1'), '["switch"]');
+});
+
+test('unrecognized saved styles fall back to Flat and cannot inject markup into the Styles panel', () => {
+  for (const invalid of ['unknown', 'HOLOFOIL', '"><img src=x onerror="alert(1)"><script>alert(1)</script>']) {
+    const env = environment({ app: true, saved: { 'little-rush-theme-v1': invalid } });
+    assert.deepEqual(env.themeCalls, ['flat']);
+    env.document.getElementById('tweaks-button').click(); env.action('styles-tab');
+    const dialog = env.document.getElementById('dialog-content');
+    assert.equal(dialog.querySelectorAll('img').length, 0);
+    assert.equal(dialog.querySelectorAll('script').length, 0);
+    assert.equal(dialog.querySelector('[data-action="theme-flat"]').getAttribute('aria-pressed'), 'true');
+    env.action('theme-unrecognized');
+    assert.deepEqual(env.themeCalls, ['flat']);
+  }
+});
+
+test('Tweaks tabs support keyboard navigation without changing selections', () => {
+  const env = environment({ app: true });
+  env.document.getElementById('tweaks-button').click();
+  const dialog = env.document.getElementById('dialog-content');
+  env.toggleGame('maze', false);
+  const saved = env.storage.get('little-rush-disabled-games-v1');
+  let target = dialog.querySelector('[data-action="games-tab"]');
+  dialog.dispatch('keydown', { target, key: 'ArrowRight' });
+  target = dialog.querySelector('[data-action="styles-tab"]');
+  assert.equal(target.getAttribute('aria-selected'), 'true'); assert.equal(target.focused, true);
+  dialog.dispatch('keydown', { target, key: 'Home' });
+  target = dialog.querySelector('[data-action="games-tab"]');
+  assert.equal(target.getAttribute('aria-selected'), 'true');
+  dialog.dispatch('keydown', { target, key: 'End' });
+  target = dialog.querySelector('[data-action="styles-tab"]');
+  assert.equal(target.getAttribute('aria-selected'), 'true');
+  dialog.dispatch('keydown', { target, key: 'ArrowLeft' });
+  assert.equal(dialog.querySelector('[data-action="games-tab"]').getAttribute('aria-selected'), 'true');
+  assert.equal(dialog.querySelector('[data-game-toggle="maze"]').checked, false);
+  assert.equal(env.storage.get('little-rush-disabled-games-v1'), saved);
+  assert.deepEqual(env.themeCalls, ['flat']);
 });

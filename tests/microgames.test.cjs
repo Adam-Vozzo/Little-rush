@@ -201,6 +201,8 @@ test('wrong solve answers block every input for exactly 750ms of active game tim
   g.tick(4200, 100);
   wrong.click();
   assert.equal(g.hint(), 'Try again in 0.8s');
+  assert.equal(g.one('.mg-cooldown').textContent, '0.8s');
+  assert.equal(g.one('.mg-cooldown').hidden, false);
   assert.ok(choices.every(choice => choice.disabled));
   assert.ok(g.root.classList.contains('is-cooling'));
   for (let i = 0; i < 10; i++) {
@@ -220,6 +222,7 @@ test('wrong solve answers block every input for exactly 750ms of active game tim
   assert.ok(choices.every(choice => !choice.disabled));
   assert.equal(g.hint(), 'Choose the answer');
   assert.equal(g.root.classList.contains('is-cooling'), false);
+  assert.equal(g.one('.mg-cooldown').hidden, true);
   correct.dispatch('click', { detail: 0 });
   assertCompleteOnce(g);
 });
@@ -293,6 +296,10 @@ test('simon ignores early input, flashes a pattern, replays mistakes, and accept
 test('stop retries an out-of-zone press and completes in the highlighted zone', () => {
   const g = game('stop');
   const button = g.one('.mg-stop-button');
+  assert.equal(catalog.find(entry => entry.id === 'stop').title, 'STOP IN THE GREEN');
+  assert.equal(g.all('button').length, 1, 'the entire lower control is one stop button');
+  assert.equal(g.one('.mg-stop-top').querySelector('.mg-stop-meter'), g.one('.mg-stop-meter'));
+  assert.equal(button.querySelector('.mg-stop-meter'), null, 'the moving meter stays above the lower stop surface');
   button.click();
   assert.equal(g.completions, 0);
   assert.equal(g.feedback.at(-1), 'error');
@@ -433,7 +440,9 @@ test('a cancelled shape drag does not fill a slot', () => {
 
 test('wires asks for labelled endpoints and completes only when that wire is cut', () => {
   const g = game('wires');
-  const requested = g.one('.mg-wire-prompt').textContent;
+  const prompt = g.one('.mg-wire-prompt');
+  assert.match(prompt.textContent, /^[A-Z]–[0-9]$/, 'the target is essential puzzle content without repeated instructions');
+  const requested = prompt.getAttribute('aria-label');
   const wires = g.all('.mg-cut-wire');
   assert.equal(wires.length, 3);
   assert.equal(new Set(wires.map(wire => wire.getAttribute('aria-label'))).size, 3);
@@ -464,7 +473,7 @@ test('wires draws varied distinct uppercase letters and digits with matching vis
     assert.equal(new Set(rightPositions).size, 3);
     assert.ok(rightPositions.some((position, index) => position !== 21 + index * 31), 'at least one wire crosses');
     pairings.add(rightPositions.join(','));
-    const requested = g.one('.mg-wire-prompt').textContent;
+    const requested = g.one('.mg-wire-prompt').getAttribute('aria-label');
     prompts.add(requested);
     assert.equal(wires.filter(wire => wire.getAttribute('aria-label') === requested).length, 1);
     wires.find(wire => wire.getAttribute('aria-label') !== requested).click();
