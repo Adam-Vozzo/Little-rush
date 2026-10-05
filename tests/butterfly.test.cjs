@@ -473,7 +473,7 @@ test('Tweaks persists checkbox choices, blocks an empty catalog, and supports a 
   const saved = JSON.parse(env.storage.get(key));
   assert.ok(saved.includes('press') && saved.includes('feed')); assert.equal(saved.includes('switch'), false);
   env.document.getElementById('start-button').click(); env.advance(2500);
-  assert.deepEqual(env.engine.snapshot(2500).tiles.filter(Boolean).map(tile => tile.type), ['switch', 'switch']);
+  assert.deepEqual(env.engine.snapshot(2500).tiles.filter(Boolean).map(tile => tile.type), ['switch']);
   const restored = environment({ app: true, saved: Object.fromEntries(env.storage) });
   restored.document.getElementById('start-button').click();
   assert.equal(restored.engine.snapshot(0).tiles.find(Boolean).type, 'switch');
@@ -530,16 +530,18 @@ test('Styles applies Flat by default and switching to Holofoil preserves game ch
   assert.equal(dialog.querySelector('[id="games-panel"]').hidden, false);
 });
 
-test('selected style restores after reload and can persistently switch back to Flat', () => {
-  const env = environment({ app: true, saved: { 'little-rush-theme-v1': 'holofoil', 'little-rush-disabled-games-v1': '["switch"]' } });
-  assert.deepEqual(env.themeCalls, ['holofoil']);
-  env.document.getElementById('tweaks-button').click(); env.action('styles-tab');
-  assert.equal(env.document.getElementById('dialog-content').querySelector('[data-action="theme-holofoil"]').getAttribute('aria-pressed'), 'true');
-  env.action('theme-flat');
-  assert.deepEqual(env.themeCalls, ['holofoil', 'flat']);
-  const restored = environment({ app: true, saved: Object.fromEntries(env.storage) });
-  assert.deepEqual(restored.themeCalls, ['flat']);
-  assert.equal(restored.storage.get('little-rush-disabled-games-v1'), '["switch"]');
+test('selected Holofoil and Aero styles restore and can persistently switch back to Flat', () => {
+  for (const theme of ['holofoil','aero']) {
+    const env = environment({ app: true, saved: { 'little-rush-theme-v1': theme, 'little-rush-disabled-games-v1': '["switch"]' } });
+    assert.deepEqual(env.themeCalls, [theme]);
+    env.document.getElementById('tweaks-button').click(); env.action('styles-tab');
+    assert.equal(env.document.getElementById('dialog-content').querySelector('[data-action="theme-'+theme+'"]').getAttribute('aria-pressed'), 'true');
+    env.action('theme-flat');
+    assert.deepEqual(env.themeCalls, [theme, 'flat']);
+    const restored = environment({ app: true, saved: Object.fromEntries(env.storage) });
+    assert.deepEqual(restored.themeCalls, ['flat']);
+    assert.equal(restored.storage.get('little-rush-disabled-games-v1'), '["switch"]');
+  }
 });
 
 test('unrecognized saved styles fall back to Flat and cannot inject markup into the Styles panel', () => {
@@ -642,14 +644,14 @@ test('Zen needs a repeatable game and never repeats the cocoon, even after hatch
   env.toggleGame('feed', true);
   assert.equal(env.document.getElementById('start-button').disabled, true);
   env.toggleGame('switch', true); env.action('close'); env.document.getElementById('start-button').click();
-  assert.equal(env.engine.snapshot(0).tiles.filter(Boolean).length, 8);
+  assert.equal(env.engine.snapshot(0).tiles.filter(Boolean).length, 2);
   assert.equal(env.engine.snapshot(0).tiles.filter(tile => tile?.type === 'press').length, 1);
   env.advance(3000); env.complete('press'); env.advance(3500);
-  assert.equal(env.habitat.active, true); assert.ok(env.engine.snapshot(3500).tiles.some(tile => tile.type === 'feed'));
-  assert.equal(env.engine.snapshot(3500).tiles.filter(Boolean).length, 8);
+  assert.equal(env.habitat.active, true); assert.ok(env.engine.snapshot(3500).tiles.some(tile => tile?.type === 'feed'));
+  assert.equal(env.engine.snapshot(3500).tiles.filter(Boolean).length, 2);
   assert.equal(env.engine.snapshot(3500).tiles.filter(tile => tile?.type === 'press').length, 0);
   env.complete('switch'); env.advance(4000);
-  assert.equal(env.engine.snapshot(4000).tiles.filter(Boolean).length, 8);
+  assert.equal(env.engine.snapshot(4000).tiles.filter(Boolean).length, 2);
   assert.equal(env.engine.snapshot(4000).tiles.filter(tile => tile?.type === 'press').length, 0);
 });
 

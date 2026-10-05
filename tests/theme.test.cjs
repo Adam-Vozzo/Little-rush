@@ -49,3 +49,28 @@ test('holofoil cancellation, blur and reduced motion leave cards level', () => {
   const e=environment(true); e.fire('pointerdown',10,10); e.fire('pointermove',180,180);
   assert.equal(e.properties.size,0); assert.equal(e.measures,0); e.window.LittleRushTheme.destroy();
 });
+
+test('switching Aero, Holofoil and Flat releases the previous renderer', () => {
+  const e=environment();let active=false,starts=0,stops=0;
+  e.window.LittleRushAero={start(){if(!active)starts++;active=true;},stop(){if(active)stops++;active=false;}};
+  e.window.LittleRushTheme.setTheme('aero');assert.equal(e.events.size,0);assert.equal(starts,1);
+  assert.equal(e.window.LittleRushTheme.getTheme(),'aero');
+  e.window.LittleRushTheme.setTheme('aero');assert.equal(starts,1);
+  e.window.LittleRushTheme.setTheme('holofoil');assert.equal(stops,1);assert.ok(e.events.size>0);
+  e.window.LittleRushTheme.setTheme('aero');e.window.LittleRushTheme.destroy();assert.equal(stops,2);assert.equal(e.events.size,0);
+});
+
+test('Aero keeps a CSS finish when Three.js or WebGL is unavailable and releases failed setup', () => {
+  for (const three of [undefined, {WebGLRenderer:class {constructor(){throw new Error('WebGL unavailable');}}}]) {
+    const document={documentElement:{dataset:{}},body:{}};
+    const window={LittleRushThree:three,matchMedia:()=>({matches:false})};
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../aero.js'),'utf8'),{window,document});
+    window.LittleRushAero.start();
+    assert.equal(document.documentElement.dataset.aeroRenderer,'css');
+    assert.equal(window.LittleRushAero.getDiagnostics().contexts,0);
+    assert.equal(window.LittleRushAero.getDiagnostics().rafPending,false);
+    window.LittleRushAero.stop();
+    assert.equal(document.documentElement.dataset.aeroRenderer,undefined);
+    assert.equal(window.LittleRushAero.getDiagnostics().active,false);
+  }
+});

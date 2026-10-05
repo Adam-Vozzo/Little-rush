@@ -2,8 +2,22 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Engine = require('../engine.js');
 
-const make = options => new Engine({ types: ['press', 'switch', 'sequence'], random: () => 0, ...options });
+const make = options => new Engine({ types: ['press', 'switch', 'sequence', 'hold', 'maze', 'level', 'board', 'pegs', 'golf'], random: () => 0, ...options });
 const populated = snapshot => snapshot.tiles.filter(Boolean);
+
+test('every visible tile stays unique, including settled tiles and queued types, in timed and Zen runs', () => {
+  for (const zen of [false, true]) {
+    const e=make({zen,types:['one','two','three'],tileLifetimeMs:100000});
+    e.start(0);e.tick(5000);
+    const unique=()=>{const types=populated(e.snapshot()).map(t=>t.type);assert.equal(new Set(types).size,types.length);};
+    unique();assert.equal(populated(e.snapshot()).length,3);
+    const tile=e.tiles.find(Boolean);e.enqueueType(tile.type);e.complete(tile.id,5100,5000);
+    e.tick(10000);unique();assert.equal(populated(e.snapshot()).length,3);
+    e.tick(10100);unique();e.tick(12500);unique();
+    assert.equal(populated(e.snapshot()).length,3);assert.equal(populated(e.snapshot()).filter(t=>t.type===tile.type).length,1);
+    assert.notEqual(populated(e.snapshot()).find(t=>t.type===tile.type).id,tile.id);
+  }
+});
 
 test('Zen starts full, never expires, and counts completions without points', () => {
   const e = make({zen: true, firstSpawnDelayMs: 650, scoringMode: 'fast'});
@@ -42,9 +56,9 @@ test('Zen respects availability and can refill when a type unlocks', () => {
   let unlocked = false;
   const e = make({zen: true, types: ['one'], isTypeAvailable: () => unlocked});
   assert.equal(populated(e.start(0)).length, 0);
-  unlocked = true; assert.equal(populated(e.tick(100)).length, 8);
+  unlocked = true; assert.equal(populated(e.tick(100)).length, 1);
   e.enqueueType('one'); const tile = e.tiles[0]; e.complete(tile.id, 200);
-  assert.equal(e.tiles[0].type, 'one'); assert.equal(populated(e.snapshot(200)).length, 8);
+  assert.equal(e.tiles[0].type, 'one'); assert.equal(populated(e.snapshot(200)).length, 1);
 });
 
 test('scoring rewards the selected timing, uses actual expiry, and never pays twice', () => {
@@ -217,7 +231,7 @@ test('single-type games work and malformed empty type catalogs are rejected', ()
   assert.throws(() => new Engine({ types: [] }), TypeError);
   const engine = make({ types: ['press'] });
   engine.start(0);
-  assert.deepEqual(populated(engine.tick(2500)).map(tile => tile.type), ['press', 'press']);
+  assert.deepEqual(populated(engine.tick(2500)).map(tile => tile.type), ['press']);
 });
 
 test('initialType controls the first spawn of every run and falls back when unknown or locked', () => {
@@ -245,7 +259,7 @@ test('availability gates feed until a butterfly exists and prevents active dupli
     }
   });
   const first = populated(engine.start(0))[0];
-  assert.equal(populated(engine.tick(2500))[1].type, 'press');
+  assert.equal(populated(engine.tick(2500)).length, 1);
   assert.equal(engine.complete(first.id, 3000), true);
   const firstFeed = populated(engine.tick(5000)).find(tile => tile.type === 'feed');
   assert.ok(firstFeed);
@@ -273,15 +287,17 @@ test('queued preferences wait for the regular spawn, reject unknown types, and s
   assert.equal(populated(engine.tick(7500)).at(-1).type, 'switch');
 });
 
-test('queued consecutive repeats wait when another available game can spawn', () => {
+test('queued occupied types wait until their earlier tile leaves', () => {
   const engine = make();
   engine.start(0);
   engine.enqueueType('press');
   assert.equal(populated(engine.tick(2500)).at(-1).type, 'switch');
-  assert.equal(populated(engine.tick(5000)).at(-1).type, 'press');
+  assert.equal(populated(engine.tick(5000)).at(-1).type, 'sequence');
+  engine.complete(engine.tiles[0].id, 5100); engine.tick(7500);
+  assert.equal(engine.tiles[0].type, 'press');
 });
 
-test('the only available type may repeat and a fully locked catalog skips spawns until unlocked', () => {
+test('the only available type leaves spare slots empty and a locked catalog waits', () => {
   let available = false;
   const engine = make({ isTypeAvailable: type => available && type === 'sequence' });
   assert.equal(populated(engine.start(0)).length, 0);
@@ -289,8 +305,8 @@ test('the only available type may repeat and a fully locked catalog skips spawns
   assert.equal(populated(engine.tick(2500)).length, 0);
   available = true;
   assert.equal(populated(engine.tick(4999)).length, 0);
-  assert.deepEqual(populated(engine.tick(7500)).map(tile => tile.type), ['sequence', 'sequence']);
-  assert.deepEqual(populated(engine.snapshot(7500)).map(tile => tile.startedAt), [5000, 7500]);
+  assert.deepEqual(populated(engine.tick(7500)).map(tile => tile.type), ['sequence']);
+  assert.deepEqual(populated(engine.snapshot(7500)).map(tile => tile.startedAt), [5000]);
 });
 
 test('restart clears queued preferences while preserving the requested first game', () => {
@@ -315,7 +331,7 @@ test('availability callbacks receive detached snapshots and invalid callbacks ar
   const first = populated(engine.start(0))[0];
   engine.tick(2500);
   assert.equal(engine.tiles[0].id, first.id);
-  assert.equal(calls, 6);
+  assert.equal(calls, 17);
 });
 
 test('a full board skips scheduled spawns without overwrites or failure until the first 25-second deadline', () => {

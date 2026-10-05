@@ -16,8 +16,9 @@
    * and onEnd(expiredTile, snapshot) are optional callbacks.
    * Snapshots and callback tiles are copies; snapshot() never advances play.
    * initialType requests the first game of each run, subject to availability.
-   * isTypeAvailable(type, snapshot) can dynamically lock a game or prevent
-   * duplicates. A spawn is skipped when no catalog type is currently available.
+   * isTypeAvailable(type, snapshot) can dynamically lock a game. Visible tiles,
+   * including settled tiles, always reserve their type to prevent duplicates.
+   * A spawn is skipped when no catalog type is currently available.
    * enqueueType(type) prefers a known type at a future regular spawn. Unavailable
    * or consecutive-repeat preferences remain queued while other eligible types
    * spawn; the first eligible preference is consumed. start() clears the queue.
@@ -221,7 +222,8 @@
       const emptySlots = this.tiles.flatMap((tile, slot) => tile ? [] : [slot]);
       if (!emptySlots.length) return false;
       const snapshot = this.snapshot(now);
-      const available = this.types.filter(type => this.isTypeAvailable(type, snapshot));
+      const occupied = new Set(this.tiles.filter(Boolean).map(tile => tile.type));
+      const available = this.types.filter(type => !occupied.has(type) && this.isTypeAvailable(type, snapshot));
       if (!available.length) return false;
       const alternatives = available.filter(type => type !== this._previousType);
       const choices = alternatives.length ? alternatives : available;

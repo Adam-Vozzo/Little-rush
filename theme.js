@@ -322,7 +322,12 @@
   }
 
   function setTheme(name) {
-    const next = name === 'holofoil' ? 'holofoil' : 'flat';
+    const next = ['holofoil', 'aero'].includes(name) ? name : 'flat';
+    if (next === 'aero') {
+      runtime?.dispose(); runtime = null; delete root.dataset.foilRenderer;
+      theme = next; root.dataset.theme = theme; window.LittleRushAero?.start(); return theme;
+    }
+    window.LittleRushAero?.stop();
     if (next === theme && (next === 'flat' || runtime)) { runtime?.refresh(); return theme; }
     theme = next; root.dataset.theme = theme;
     if (readyListener) { document.removeEventListener('DOMContentLoaded', readyListener); readyListener = null; }
@@ -339,7 +344,7 @@
   window.LittleRushTheme = {
     setTheme,
     getTheme: () => theme,
-    refresh: () => runtime?.refresh(),
+    refresh: () => { runtime?.refresh(); window.LittleRushAero?.refresh(); },
     destroy: () => setTheme('flat'),
     getDiagnostics: () => ({
       theme, renderer: runtime?.failed ? 'css-fallback' : runtime?.renderer ? 'webgl' : theme === 'holofoil' ? 'idle' : 'off',
