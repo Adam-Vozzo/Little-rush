@@ -1,6 +1,6 @@
 # Little Rush
 
-A mobile-first 2D micro-game collection with 23 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.7.0 adds endless Zen mode, playable practice tiles in Tweaks, and smooth claw acceleration with a stronger momentum swing. No libraries, external assets, account or network connection are required to play.
+A mobile-first 2D micro-game collection with 29 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.8.0 adds bubble shooting, match-three, bouncing pegs, a telescope search, a dice board and mini golf. Zen now has only one cocoon per run. No libraries, external assets, account or network connection are required to play.
 
 ## Play
 
@@ -25,20 +25,20 @@ Future pushes to `main` update the site automatically. See [GitHub's publishing-
 - The board starts empty; after a 650ms breath, a random eligible game appears. On Normal, a new game appears every **2.5 seconds** in a random empty slot. When all eight slots are occupied, that spawn is skipped; the next scheduled spawn uses an available slot.
 - On Normal, every tile has **25 seconds**. Its filled top-right circle empties as time runs out and turns red in the final 4 seconds. A single expired tile ends the run.
 - **WAIT & HATCH** can appear randomly during the run: wait 3 seconds for the caterpillar to become a chrysalis, then tap to release a butterfly. It appears only once per run. **CRACK IT** games are geodes: tap a randomized 5–11 times to crack the shell and reveal glowing crystals.
-- The butterfly flutters over the board for the rest of that run. Hatching unlocks **FEED BUTTERFLY** when that game is enabled, queuing it for the next regular spawn. Later Feed tiles can appear randomly, with at most one active at a time.
+- The butterfly flutters over the board for the rest of that run. Hatching unlocks **FEED BUTTERFLY** when that game is enabled, queuing it for the next spawn. Later Feed tiles can appear randomly, with at most one active at a time in timed modes.
 - Drag nectar out of its tile to the butterfly. It keeps flying while you carry nectar. A missed drop can be retried. Keyboard users can select nectar with Enter and then activate the focused butterfly.
 - Complete tiles in any order. Wrong inputs can be retried. Pause freezes game time, animations and spawn scheduling; leaving the tab pauses automatically. Restart clears the butterfly and Feed unlock.
-- During play, a compact bar shows elapsed time, cleared count and pause. Each tile's title states its objective. Controls fill the remaining tile space, with no visible instruction footer. Essential puzzle content, such as a wire's target endpoints, stays visible; detailed state updates remain available to screen readers. Sound is optional and initially off.
+- During timed play, a compact bar shows elapsed time, cleared count and pause. Each tile's title states its objective. Controls fill the remaining tile space, with compact prompts for arcade controls and progress. Essential puzzle content, such as a wire's target endpoints, stays visible; detailed state updates remain available to screen readers. Sound is optional and initially off.
 
 ## Difficulty and points
 
 The main menu defaults to **Normal** (2.5-second spawns, 25-second expiry). **Calm** uses 3-second spawns and 30-second expiry; **Extreme** uses 1.5-second spawns and 15-second expiry. The selection is saved locally and applied at the next run.
 
-**Zen** starts with all eight slots filled and immediately replaces a completed game after its finishing animation. Tiles never expire. The HUD shows only the number completed and a Zen label: no points or run timer. Timing-based points preferences are retained for timed modes. Zen does not change timed-run records. Games keep their own interaction timing, such as Simon playback and the aim trainer. Hatch and Feed can repeat in Zen so even a small enabled game pool keeps the board full.
+**Zen** starts with all eight slots filled and immediately replaces a completed game after its finishing animation. Tiles never expire. The HUD shows only the number completed and a Zen label: no points or run timer. Timing-based points preferences are retained for timed modes. Zen does not change timed-run records. Games keep their own interaction timing, such as Simon playback and the aim trainer. Hatch appears at most once per run, including Zen. Other enabled games fill the remaining slots; Feed can repeat after hatching. Zen requires at least one enabled game besides Hatch and Feed so all eight slots can be filled from the start.
 
 In **Tweaks → Gameplay**, enable **Time-based points** to replace the top-left cleared count with a cumulative points score. **Faster clears** awards the rounded percentage of tile lifetime remaining (1–100 points); **Closer to expiry** awards the rounded percentage elapsed (1–100). Expired tiles earn nothing. Both use active game time, so pausing cannot alter the reward. Completed tiles display their award briefly, while the engine continues tracking cleared count independently. Existing title-screen cleared records remain completion records.
 
-Successful tiles retain their completed pose before leaving: 720ms for pipes, the beetle and Match, 880ms for the geode, and 480ms for other games. These tiles have already scored, cannot expire or score twice, and reserve their slot until the exit finishes. Their completion timing freezes when paused.
+Successful tiles retain their completed pose before leaving: 720ms for pipes, the beetle, Match and the six arcade games, 880ms for the geode, and 480ms for other games. These tiles have already scored, cannot expire or score twice, and reserve their slot until the exit finishes. Their completion timing freezes when paused.
 
 ## Records and Tweaks
 
@@ -49,7 +49,7 @@ Open **Tweaks** beside the title. Its **Micro-games** tab shows a two-column gal
 Practice directly in any tile, including games disabled for runs. A completed tile briefly retains its final state, then resets to a fresh puzzle. Practice has no tile expiry and never changes run progress or records. Offscreen and hidden-page previews pause; closing or switching tabs cleans up their controls. Feed has its own practice butterfly, independent of the run.
 
 - Turning off **WAIT & HATCH** also turns off **FEED BUTTERFLY**. Feed can only be enabled while Hatch is enabled.
-- At least one repeatable challenge must be enabled to start. **WAIT & HATCH** alone is not a valid timed-run pool; Zen allows it to repeat.
+- At least one repeatable challenge must be enabled to start. **WAIT & HATCH** alone is not a valid pool. Zen also needs a game that is available before Feed unlocks.
 - The first challenge is randomly chosen from the enabled, currently available games; Hatch has no special priority.
 
 In **Styles**, choose **Flat** or **Holofoil**. Style changes apply immediately, are saved in this browser and are restored when the game is reopened.
@@ -95,6 +95,12 @@ Tile colors identify five consistent categories:
 | TAP LOW TO HIGH | Tap the dice in ascending dot-count order. |
 | MATCH | Tap anywhere in the tile when both the scrolling color and shape match the reference. A miss has a 750ms cooldown while scrolling continues. |
 | TAP TARGETS | Press Start. Six circles spawn at 500ms intervals over three seconds, each fading and scaling in for 500ms. Tap each within its next 500ms or the tile resets for another attempt. |
+| POP SIX | Hold the arrows to aim, then shoot from below. Connect three same-color bubbles; clear six in total. Shots rebound off side walls. A crowded rack refreshes for another try. |
+| MAKE THREE | Tap two neighboring shapes or swipe one to swap. Make a horizontal or vertical line of three. Invalid swaps return; every board has a solution. |
+| HIT THREE PEGS | Hold arrows to aim from above, then shoot. The ball falls and rebounds; hit all three marked gold pegs across as many shots as needed. |
+| FIND THE PLANET | Drag the telescope sky, or use arrow keys. Center the planet pictured in the reference badge for 400ms to lock on. |
+| LAND ON THE GIFT | Choose one of two visible dice to move that many spaces. Land exactly on the gift; overshooting sends the pawn back to the start. Dice refresh after each move, with a valid finish always available nearby. |
+| PUTT IT IN | Drag back from the ball to aim and set power, then release. Bounce off the edges and avoid the round bumper. Keep putting until the ball drops into the cup. Arrow keys adjust aim/power; Space shoots. |
 | FEED BUTTERFLY | Drag nectar across the board to the unlocked butterfly. |
 
 Select **Let's play** on the title screen to start a run. The play screen gives most of the portrait viewport to its eight square tiles. The compact header, six-pixel tile padding and larger controls accommodate both touch and mouse input; keyboard alternatives are also available for the supported interactions.
@@ -104,6 +110,7 @@ Select **Let's play** on the title screen to start a run. The play screen gives 
 - `engine.js`: timer-free run state. Spawn cadence, deadlines, dynamic availability, queued games and restart/pause handling.
 - `microgames.js` and `microgames.css`: ten core games, including hatch, geode, wire, switch and shape interactions.
 - `extra-games.js` and `extra-games.css`: twelve additional games, pure puzzle generators, and the shared thumb-only slider control.
+- `arcade-games.js` and `arcade-games.css`: six arcade games, shared aiming controls, substepped ball physics and a solvable match-three generator.
 - `butterfly.js` and `butterfly.css`: persistent butterfly and cross-board nectar drag interaction.
 - `previews.js`: isolated practice clocks, completion resets, visibility pausing, and the practice butterfly.
 - `app.js`: title and play screens, the one-time hatch and Feed gating, Tweaks selections, countdowns, sounds and local daily/all-time records.
@@ -116,7 +123,7 @@ Add a pack with `LittleRushGames.register(catalogEntries, mountFunction)`. Each 
 
 ## Verification
 
-Run `npm test` / `node --test tests/*.test.cjs`. Tests cover all 22 games, 2.5-second spawns, 25-second deadline boundaries, full-board handling, queue/unlock logic, pointer ownership, cooldowns, upload states, pause/restart/expiry cleanup, and the integrated hatch-to-feed lifecycle. Independent solvers verify generated puzzles across 1,000 seeds. DOM test doubles verify logic; browser checks verify rendered layout and real pointer behavior.
+Run `npm test` / `node --test tests/*.test.cjs`. Tests cover all 29 games, 2.5-second spawns, 25-second deadline boundaries, full-board handling, queue/unlock logic, pointer ownership, cooldowns, upload states, pause/restart/expiry cleanup, and the integrated hatch-to-feed lifecycle. Solvers verify generated puzzles across many seeds, including 500 match-three boards and every peg layout. Golf completion is checked at 30, 60 and 120fps. DOM test doubles verify logic; browser checks verify rendered layout and real pointer behavior.
 
 The browser QA checklist includes the hatch-to-butterfly-to-nectar sequence, shape drops, wire cuts, bounded switch knobs, slider and claw drags, ignored track taps, upload progression, generated maze routes and blocked wall shortcuts, pipe solutions, geode reveal, math cooldown, compact tile layouts, portrait phone sizes, records, and persistent Tweaks selections. Check both Styles choices, saved theme restoration, Holofoil's reduced-motion behavior and its WebGL fallback. Also check loading and starting with every asset served under a `/Little-rush/` path. No physical iOS/Android device testing has been performed.
 
