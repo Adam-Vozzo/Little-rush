@@ -242,7 +242,7 @@
       onComplete();
     };
 
-    // Both levels and the claw use a thumb-only slider. Relative motion preserves
+    // Levels use a thumb-only slider. Relative motion preserves
     // the grip offset; neither touching the rail nor simply touching the thumb jumps.
     const slidingControl = ({ track, handle, initial, label, describe = value => `${Math.round(value)}%`, onChange = () => {}, onCommit = () => {}, canMove = () => true }) => {
       let value = initial, pointer = null, originX = 0, originValue = initial, travel = 1, moved = false, everMoved = false;
@@ -674,10 +674,14 @@
       const carriage = node('div', 'ex-catch-travel');
       const targetEl = node('span', 'ex-catch-prize', '✿');
       const rod = node('span', 'ex-claw-rod');
-      const claw = node('div', 'ex-claw ex-slider-thumb');
+      const claw = node('div', 'ex-claw');
       claw.innerHTML = svg('<path d="M50 0v32m0 0L28 58l8 12m14-38 22 26-8 12" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="33" y="0" width="34" height="22" rx="4" fill="#fff8e9"/>');
       targetEl.style.left = `${target}%`;
-      const slider = slidingControl({ track: carriage, handle: claw, initial, label: 'Drag the claw over the flower', describe: value => `${Math.round(value)}%; flower at ${target}%`, canMove: () => dropAt === null && !held });
+      let position = initial, moved = false;
+      claw.setAttribute('role', 'meter'); claw.setAttribute('aria-label', 'Claw position'); claw.setAttribute('aria-valuemin', '0'); claw.setAttribute('aria-valuemax', '100');
+      const paintClaw = () => { claw.style.left = `${position}%`; claw.setAttribute('aria-valuenow', String(Math.round(position))); claw.setAttribute('aria-valuetext', `${Math.round(position)}%; flower at ${target}%`); };
+      const slider = {get value() { return position; }, get moved() { return moved; }, nudgeTo(next) { if (dropAt !== null) return; moved = true; position = clamp(next, 0, 100); paintClaw(); }};
+      paintClaw();
       const controls = node('div', 'ex-catch-controls');
       const stopMoving = (settleTap = false) => {
         if (!held) return;
@@ -691,7 +695,7 @@
       };
       suspenders.push(stopMoving);
       const drop = () => {
-        if (dropAt !== null || slider.dragging) return;
+        if (dropAt !== null) return;
         stopMoving(); dropAt = age; grabbed = caught = false;
         travel = Math.max(0, machine.getBoundingClientRect().height - (claw.clientHeight || claw.getBoundingClientRect().height) * .7 - targetEl.getBoundingClientRect().height * .45);
         controls.querySelectorAll('button').forEach(control => { control.disabled = true; });
@@ -700,10 +704,10 @@
       const arrow = (direction, label, text) => {
         const control = button('ex-key ex-claw-arrow', label, text, event => {
           // Screen readers issue a click without a pointer or held key.
-          if (event.detail === 0 && !held && dropAt === null && !slider.dragging) { slider.nudgeTo(slider.value + direction); feedback(); }
+          if (event.detail === 0 && !held && dropAt === null) { slider.nudgeTo(slider.value + direction); feedback(); }
         });
         const begin = (pointer, key) => {
-          if (held || dropAt !== null || slider.dragging) return false;
+          if (held || dropAt !== null) return false;
           held = {control, direction, pointer, key, since: age, origin: slider.value};
           control.classList.add('is-held'); feedback(); return true;
         };

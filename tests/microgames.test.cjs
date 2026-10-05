@@ -303,8 +303,23 @@ test('stop keeps moving during its 750ms wrong-answer cooldown and then accepts 
   for (let i = 0; i < 10; i++) { g.tick(749); button.click(); }
   assert.equal(g.feedback.length, 1); assert.equal(button.disabled, true);
   g.tick(750); assert.equal(button.disabled, false);
+  const center = parseFloat(g.one('.mg-stop-zone').style.left) + 14;
+  g.tick(420 * (2 * Math.PI - Math.acos(1 - center / 50)));
   button.click();
   assertCompleteOnce(g);
+});
+
+test('stop uses each randomized visible zone for judging hits', () => {
+  const starts = new Set();
+  for (const value of [0, .25, .5, .75, .999]) {
+    const g = game('stop', {random: () => value}), button = g.one('.mg-stop-button');
+    const start = parseFloat(g.one('.mg-stop-zone').style.left); starts.add(start);
+    assert.ok(start >= 5 && start + 28 <= 95);
+    button.click(); assert.equal(g.completions,0);
+    const hitAt = 420 * (2 * Math.PI - Math.acos(1 - (start + 14) / 50));
+    g.tick(hitAt); button.click(); assertCompleteOnce(g);
+  }
+  assert.equal(starts.size,5);
 });
 
 function holdFor(g, milliseconds, startAge = 0) {

@@ -332,10 +332,12 @@
       const meter = node('div', 'mg-stop-meter');
       meter.innerHTML = '<span class="mg-stop-zone"></span><span class="mg-stop-dot"></span>';
       const movingDot = meter.querySelector('.mg-stop-dot');
+      const zoneStart = demo ? 36 : integer(5, 67), zoneEnd = zoneStart + 28;
+      meter.querySelector('.mg-stop-zone').style.left = `${zoneStart}%`;
       let position = demo ? 41 : 0, retryAt = 0;
       const stop = button('mg-stop-button', 'Stop the moving dot inside the highlighted zone', () => {
         if (age < retryAt) return;
-        if (position >= 36 && position <= 64) {
+        if (position >= zoneStart && position <= zoneEnd) {
           feedback();
           finish();
         } else {

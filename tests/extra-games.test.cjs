@@ -77,6 +77,11 @@ function dragTo(handle, target, { release = true, pointerId = 1 } = {}) {
   handle.dispatch('pointermove', { clientX: 60 + (target - initial) * 1.2, pointerId });
   if (release) handle.dispatch('pointerup', { pointerId });
 }
+function moveClawTo(g, target) {
+  const initial = Number(g.one('.ex-claw').getAttribute('aria-valuenow'));
+  const arrow = g.label(target > initial ? 'Move claw right' : 'Move claw left');
+  for (let step = 0; step < Math.abs(target - initial); step++) arrow.dispatch('click', {detail: 0});
+}
 function drawSignature(paper, stroke, pointerId = 1, release = true) {
   paper.rect = { left: 0, top: 0, width: 160, height: 100 };
   paper.dispatch('pointerdown', { clientX: stroke[0][0], clientY: stroke[0][1], pointerId });
@@ -379,7 +384,7 @@ test('claw rod follows a slow descent, a grab pause, and retraction before compl
   const g = game('catch'), claw = g.one('.ex-claw'), rod = g.one('.ex-claw-rod');
   g.one('.ex-catch-machine').rect = {height: 100, width: 120}; claw.rect = {height: 40, width: 40};
   g.one('.ex-catch-prize').rect = {height: 24, width: 24};
-  dragTo(claw, 20); g.label('Drop claw').click();
+  moveClawTo(g, 20); g.label('Drop claw').click();
   g.tick(350); const halfway = parseFloat(rod.style.height); assert.ok(halfway > 8);
   g.tick(700); const bottom = parseFloat(rod.style.height); assert.ok(bottom > halfway);
   assert.equal(g.completions, 0); g.tick(850); assert.equal(parseFloat(rod.style.height), bottom);
@@ -427,8 +432,8 @@ test('aim misses reset the tile, cannot accept expired or stale targets, and use
   g.label('Start aim trainer').click(); g.tick(9000); assert.equal(g.all('.ex-aim-target').length, 0);
   g.label('Start aim trainer').click(); g.destroy(); g.tick(10000); assert.equal(g.completions, 0);
 });
-test('shared sliders ignore rail taps and small clicks, preserve grip offset, and own their pointer', () => {
-  for (const type of ['level', 'catch']) {
+test('level sliders ignore rail taps and small clicks, preserve grip offset, and own their pointer', () => {
+  for (const type of ['level']) {
     const g = game(type); const track = g.one(type === 'level' ? '.ex-level-track' : '.ex-catch-machine');
     const handle = g.one(type === 'level' ? '.ex-level-slider' : '.ex-claw');
     const initial = Number(handle.getAttribute('aria-valuenow'));
@@ -461,8 +466,10 @@ test('catch requires moving the claw and a finished drop, locks position while d
   claw.dispatch('pointerdown', { clientX: 60 }); assert.equal(claw.captured, undefined);
   g.tick(1449); assert.equal(g.completions, 0); assert.equal(g.label('Drop claw').disabled, true);
   g.tick(1450); assert.equal(g.label('Drop claw').disabled, false);
-  dragTo(claw, target, { release: false }); g.label('Drop claw').click(); g.tick(1600); assert.equal(g.completions, 0);
-  claw.dispatch('pointerup'); g.label('Drop claw').click();
+  const before = claw.getAttribute('aria-valuenow'); dragTo(claw, target);
+  assert.equal(claw.getAttribute('aria-valuenow'), before, 'The claw cannot be dragged');
+  assert.equal(claw.getAttribute('role'), 'meter');
+  moveClawTo(g, target); g.tick(1600); g.label('Drop claw').click();
   g.tick(2300); assert.equal(g.completions, 0); assert.ok(g.one('.ex-catch-prize').classList.contains('is-held'));
   g.tick(3049); assert.equal(g.completions, 0); g.tick(3050); completedOnce(g);
 });
@@ -497,7 +504,7 @@ test('dice only clears after all six faces are counted in ascending order', () =
 });
 test('destroy removes listeners and pointer capture during a drag', () => {
   for (const type of ['sign', 'level', 'catch']) {
-    const g = game(type); const handle = g.one(type === 'sign' ? '.ex-sign-paper' : type === 'level' ? '.ex-level-slider' : '.ex-claw');
+    const g = game(type); const handle = g.one(type === 'sign' ? '.ex-sign-paper' : type === 'level' ? '.ex-level-slider' : '.ex-claw-arrow');
     handle.dispatch('pointerdown', { clientX: 60, clientY: 35 }); assert.equal(handle.captured, 1);
     g.destroy(); assert.equal(handle.captured, null); assert.equal(g.container.children.length, 0);
     handle.dispatch('pointermove', { clientX: 108, clientY: 48 }); assert.equal(g.completions, 0);

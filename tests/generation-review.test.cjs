@@ -411,7 +411,7 @@ test('independent review: canceled slider drag rolls back; ignored fingers canno
   assert.equal(g.completions, 0);
 });
 
-test('independent review: 100 catch games require dragging then dropping, never jumping from a rail tap', () => {
+test('independent review: 100 catch games use arrow controls and never move from dragging the claw', () => {
   for (let seed = 0; seed < 100; seed++) {
     const { target, initial } = puzzles.generateLevels(randomFor(seed), 1, 10, 90)[0];
     const g = game('catch', seed), handle = g.one('.ex-claw'), rail = g.one('.ex-catch-machine'), drop = g.one('.ex-drop');
@@ -420,11 +420,13 @@ test('independent review: 100 catch games require dragging then dropping, never 
     assert.equal(Number(handle.getAttribute('aria-valuenow')), initial);
     drop.fire('click'); g.tick(1450);
     assert.equal(g.completions, 0);
-    moveSlider(handle, target);
+    moveSlider(handle, target); assert.equal(Number(handle.getAttribute('aria-valuenow')), initial);
+    const buttons = g.all('.ex-claw-arrow');
+    for (let step = 0; step < Math.abs(target - initial); step++) buttons[target > initial ? 1 : 0].fire('click', {detail: 0});
     drop.fire('click'); g.tick(2899);
     assert.equal(g.completions, 0);
     g.tick(2900);
-    assert.equal(g.completions, 1, `Catch drag rejected for seed ${seed}`);
+    assert.equal(g.completions, 1, `Catch controls rejected for seed ${seed}`);
     g.destroy();
   }
 });

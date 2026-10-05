@@ -135,6 +135,16 @@ test('jewel swipes own one pointer and canceled drags never swap', () => {
   pieces[a].dispatch('pointerup', {clientX: 20 + (b % 4 - a % 4) * 30, clientY: 20 + (Math.floor(b / 4) - Math.floor(a / 4)) * 30});
   pieces[a].click(); g.advance(200); assert.equal(g.completions, 1);
 });
+test('jewel dragging follows one cardinal axis and displaces its neighbor before release', () => {
+  const g = game('jewels'), pieces = g.all('.arc-gem');
+  pieces[5].dispatch('pointerdown', {clientX:20, clientY:20, pointerId:7});
+  pieces[5].dispatch('pointermove', {clientX:40, clientY:35, pointerId:7});
+  assert.equal(pieces[5].style.transform, 'translate(20px,0px)'); assert.equal(pieces[6].style.transform, 'translate(-20px,0px)');
+  pieces[5].dispatch('pointermove', {clientX:22, clientY:90, pointerId:7});
+  assert.equal(pieces[5].style.transform, 'translate(2px,0px)');
+  g.suspend(); assert.equal(pieces[5].style.transform,''); assert.equal(pieces[6].style.transform,''); assert.equal(pieces[5].pointerId,null);
+  g.advance(500); assert.equal(g.completions,0);
+});
 test('drag aiming responds immediately, owns one pointer, and cancels safely without firing', () => {
   for (const type of ['bubbles', 'pegs']) {
     const g = game(type), field = g.one('.arc-scene'), angle = () => Number(field.getAttribute('aria-valuenow'));
@@ -177,14 +187,52 @@ test('random peg fields vary their positions and counts with three distinct mark
   for(const value of [0,.5,.999]) assert.equal(rules.generatePegs(()=>value).filter(p=>p.marked).length,3);
 });
 test('random board lengths have an exact solution using the four fixed dice once each', () => {
-  const lengths=new Set();
+  const lengths=new Set(), layouts=new Set();
   for(let seed=1;seed<=500;seed++) {
     const {values,goal,path}=rules.generateBoard(seeded(seed)); lengths.add(goal);
     assert.equal(values.length,4); assert.equal(new Set(values).size,4); assert.equal(path.length,goal+1);
     assert.ok(goal>=6&&goal<=12);
+    layouts.add(path.map(p=>`${p.x},${p.y}`).join(';'));
+    path.forEach((p,i)=>path.slice(i+1).forEach((q,j)=>{
+      const gap=Math.abs(p.x-q.x)+Math.abs(p.y-q.y);
+      assert.ok(Math.abs(p.x-q.x)>=31||Math.abs(p.y-q.y)>=31, 'Steps must not overlap');
+      if(j===0) assert.equal(gap,31,'Consecutive steps stay next to one another');
+      else assert.ok(gap>31,'Non-consecutive steps cannot create an ambiguous branch');
+    }));
     assert.ok(Array.from({length:15},(_,i)=>i+1).some(mask=>values.reduce((sum,n,i)=>sum+(mask & 1<<i ? n : 0),0)===goal));
   }
   assert.equal(lengths.size,7);
+  assert.ok(layouts.size>400);
+});
+
+test('planet positions vary continuously, stay reachable and separated, and start away from the crosshair', () => {
+  const layouts=new Set();
+  for(let seed=1;seed<=400;seed++) {
+    const planets=rules.generatePlanets(seeded(seed*65537)); assert.equal(planets.length,4); layouts.add(JSON.stringify(planets));
+    planets.forEach((p,i)=>{assert.ok(p.x>=65&&p.x<=355&&p.y>=65&&p.y<=255);assert.ok(Math.hypot(p.x-210,p.y-160)>=60);planets.slice(i+1).forEach(q=>assert.ok(Math.hypot(p.x-q.x,p.y-q.y)>=78));});
+  }
+  assert.equal(layouts.size,400); for(const value of [0,.5,.999])assert.equal(rules.generatePlanets(()=>value).length,4);
+});
+
+test('peg preview traces the physical rebound, ignores cleared pegs, and never changes live pegs', () => {
+  const pegs=[{x:108,y:65,r:8,hit:false}], before=JSON.stringify(pegs), preview=rules.pegPreview(0,pegs);
+  assert.ok(preview.rebound.length>3); assert.ok(preview.rebound.at(-1).x<preview.rebound[0].x);
+  assert.equal(JSON.stringify(pegs),before);
+  const ball=rules.pegLaunch(0);let hit=false;
+  for(let i=0;i<150&&!hit;i++)rules.advanceBall(ball,1/240,{gravity:180,bounce:.9,obstacles:pegs,onHit:()=>hit=true});
+  assert.ok(Math.hypot(ball.x-preview.rebound[0].x,ball.y-preview.rebound[0].y)<.0001);
+  assert.equal(rules.pegPreview(0,[{...pegs[0],hit:true}]).rebound.length,0); assert.equal(rules.pegPreview(65,pegs).rebound.length,0);
+});
+
+test('golf pull indicator stays behind the ball and warms from white toward red with power', () => {
+  const g=game('golf'),field=g.one('.arc-scene'),guide=g.one('.arc-golf-guide'),start=rules.generateGolf(()=>0).start;
+  field.rect={left:0,top:0,width:200,height:150};
+  field.dispatch('pointerdown',{clientX:start.x,clientY:start.y});
+  field.dispatch('pointermove',{clientX:start.x-6,clientY:start.y});
+  assert.equal(guide.getAttribute('d'),`M${start.x} ${start.y}L${start.x-6} ${start.y}`); const low=guide.getAttribute('stroke');
+  field.dispatch('pointermove',{clientX:start.x-60,clientY:start.y});
+  assert.equal(guide.getAttribute('d'),`M${start.x} ${start.y}L${start.x-60} ${start.y}`); assert.equal(guide.getAttribute('stroke'),'rgb(255, 75, 80)'); assert.notEqual(low,guide.getAttribute('stroke'));
+  field.dispatch('pointercancel');assert.equal(guide.getAttribute('visibility'),'hidden');
 });
 test('golf courses vary starts, holes, obstacles and turf, with safe gaps and a traversable route', () => {
   const starts=new Set(), holes=new Set(), obstacleKinds=new Set(), turf=new Set();
