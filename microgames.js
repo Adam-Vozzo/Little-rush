@@ -302,8 +302,7 @@
             if (inputIndex === pattern.length) finish();
           }
         });
-        // Each pad is a real annular sector, including its inset highlight.
-        pad.innerHTML = svg('<path class="mg-simon-sector" d="M96 3A93 93 0 0 0 3 96H53A43 43 0 0 1 96 53Z" fill="currentColor"/><path class="mg-simon-rim" d="M96 3A93 93 0 0 0 3 96H53A43 43 0 0 1 96 53Z" stroke="white" stroke-width="2"/>');
+        pad.innerHTML = svg('<rect class="mg-simon-sector" x="2" y="2" width="96" height="96" rx="10" fill="currentColor"/><rect class="mg-simon-rim" x="4" y="4" width="92" height="92" rx="8" stroke="white" stroke-width="2"/>').replace('<svg ', '<svg preserveAspectRatio="none" ');
         board.append(pad);
         return pad;
       });

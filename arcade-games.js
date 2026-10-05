@@ -10,19 +10,19 @@
     { id: 'golf', title: 'PUTT IT IN', color: 'sage' },
   ];
   const colors = ['#dd706b', '#459db3', '#d7a338', '#71985c'];
-  const names = ['coral diamond', 'blue circle', 'gold star', 'green square'];
+  const names = ['coral triangle', 'blue circle', 'gold diamond', 'green square'];
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
   const integer = (random, n) => Math.min(n - 1, Math.floor(random() * n));
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const radians = degrees => degrees * Math.PI / 180;
   const svgText = body => `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${body}</svg>`;
   const gemPaths = [
-    '<path d="m20 3 16 17-16 17L4 20Z"/><path d="m20 8 10 12-10-3-10 3Z" fill="#fff" opacity=".4"/><path d="m20 17 0 15 10-12Z" fill="#000" opacity=".1"/>',
-    '<circle cx="20" cy="20" r="15"/><path d="M10 18a11 11 0 0 1 14-9" fill="none" stroke="#fff" opacity=".65" stroke-width="3" stroke-linecap="round"/>',
-    '<path d="m20 3 5 11 12 2-9 9 2 12-10-6-10 6 2-12-9-9 12-2Z"/><path d="m20 7 0 16-12-6 9-1Z" fill="#fff" opacity=".4"/>',
-    '<rect x="6" y="6" width="28" height="28" rx="7"/><path d="M10 17v-5q0-2 3-2h13" fill="none" stroke="#fff" opacity=".55" stroke-width="3" stroke-linecap="round"/>',
+    '<path d="M20 7 34 31H6Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>',
+    '<circle cx="20" cy="20" r="12"/>',
+    '<path d="M20 5 35 20 20 35 5 20Z"/>',
+    '<rect x="9" y="9" width="22" height="22" rx="3"/>',
   ];
-  const gem = kind => svgText(`<g fill="${colors[kind]}" stroke="none">${gemPaths[kind]}</g>`);
+  const gem = kind => svgText(`<g fill="currentColor" color="${['#b95260', '#427d9e', '#c49a35', '#548453'][kind]}" stroke="none">${gemPaths[kind]}</g>`);
   function matches(cells, size = 4) {
     const found = new Set();
     for (let i = 0; i < cells.length; i++) {
@@ -185,7 +185,17 @@
       body.append(el); return el;
     };
     const caption = text => { const el = node('div', 'arc-caption', text); body.append(el); return el; };
-    const point = (el, e) => { const rect = el.getBoundingClientRect(), scale = Math.min(rect.width / 200, rect.height / 150); return {x: (e.clientX - rect.left - (rect.width - 200 * scale) / 2) / scale, y: (e.clientY - rect.top - (rect.height - 150 * scale) / 2) / scale}; };
+    const point = (el, e) => { const rect = el.getBoundingClientRect(), height = Number(el.getAttribute('viewBox').split(' ')[3]), scale = Math.min(rect.width / 200, rect.height / height); return {x: (e.clientX - rect.left - (rect.width - 200 * scale) / 2) / scale, y: (e.clientY - rect.top - (rect.height - height * scale) / 2) / scale}; };
+    // Match the actual play area without stretching circles or letterboxing the field.
+    const fitScene = (field, resized) => {
+      if (!window.ResizeObserver) return;
+      const observer = new window.ResizeObserver(() => {
+        if (destroyed || !field.clientWidth || !field.clientHeight) return;
+        const height = 200 * field.clientHeight / field.clientWidth;
+        field.setAttribute('viewBox', `0 0 200 ${height}`); resized(height);
+      });
+      observer.observe(field); listeners.push(() => observer.disconnect());
+    };
     const aimControls = (field, direction, fire, changed, allowed) => {
       let angle = 0, pointer = null, original = 0;
       const controls = node('div', 'arc-controls');
@@ -209,7 +219,7 @@
       const field = scene('Bubble shooter. Match three of a color. Clear six bubbles.', true);
       const layer = snode('g'), guide = snode('path', {class: 'arc-guide'}), barrel = snode('path', {d: 'M100 138V119', class: 'arc-barrel'}), loaded = snode('circle', {cx: 100, cy: 137, r: 10, class: 'arc-bubble'}), projectile = snode('circle', {r: 10, class: 'arc-bubble', visibility: 'hidden'});
       field.append(guide, layer, barrel, loaded, projectile);
-      let balls = [], shot = null, readyAt = 0, cleared = 0, color = 0, misses = 0, angle = 0;
+      let balls = [], shot = null, readyAt = 0, cleared = 0, color = 0, angle = 0;
       const status = caption('0 / 6');
       const paintAim = value => {
         angle = value; barrel.setAttribute('transform', `rotate(${angle} 100 138)`);
@@ -229,7 +239,7 @@
       const resetRack = () => {
         balls.forEach(ball => ball.el.remove()); balls = [];
         balls = generateBubbles(random).map(ball => makeBall(ball.row, ball.col, ball.color));
-        misses = 0; load();
+        load();
       };
       const settle = () => {
         const candidates = [];
@@ -240,17 +250,24 @@
           candidates.push({...p, row, col});
         }
         candidates.sort((a, b) => distance(a, shot) - distance(b, shot));
-        if (!candidates.length) { shot = null; resetRack(); return; }
-        const target = candidates[0], added = makeBall(target.row, target.col, color); balls.push(added);
-        const cluster = bubbleCluster(balls, added), popped = new Set(cluster.length >= 3 ? cluster : []);
+        const target = candidates[0];
+        let cluster, required = 3;
+        if (target) { const added = makeBall(target.row, target.col, color); balls.push(added); cluster = bubbleCluster(balls, added); }
+        else {
+          // Even a full rack can be cleared: the incoming ball completes a pair
+          // at its point of impact instead of discarding the player's board.
+          const impact = [...balls].sort((a, b) => distance(a, shot) - distance(b, shot))[0];
+          cluster = impact?.color === color ? bubbleCluster(balls, impact) : []; required = 2;
+        }
+        const popped = new Set(cluster.length >= required ? cluster : []);
         if (popped.size) {
           const remaining = balls.filter(ball => !popped.has(ball)), attached = new Set();
           remaining.filter(ball => ball.row === 0).forEach(ball => bubbleCluster(remaining, ball, false).forEach(member => attached.add(member)));
           remaining.filter(ball => !attached.has(ball)).forEach(ball => popped.add(ball));
-          cleared += popped.size; feedback(); misses = 0;
+          cleared += popped.size; feedback();
           popped.forEach(ball => { ball.el.classList.add('is-popped'); ball.removeAt = age + 340; });
           status.textContent = `${Math.min(6, cleared)} / 6`; hint.textContent = `${Math.min(6, cleared)} of six bubbles cleared`;
-        } else { misses++; hint.textContent = 'Aim for two or more bubbles of the same color'; }
+        } else { hint.textContent = 'Aim for two or more bubbles of the same color'; }
         shot = null; readyAt = age + 380; projectile.setAttribute('visibility', 'hidden');
         if (cleared >= 6) finish();
       };
@@ -269,8 +286,7 @@
           }
           if (shot) attr(projectile, {cx: shot.x, cy: shot.y});
         } else if (age >= readyAt) {
-          if (misses >= 3 || !balls.length || balls.some(ball => ball.row >= 4)) resetRack();
-          else if (readyAt) load();
+          if (readyAt) load();
           readyAt = 0; loaded.setAttribute('visibility', 'visible'); guide.setAttribute('visibility', 'visible');
         }
         controls.update();
@@ -279,7 +295,7 @@
     } else if (type === 'jewels') {
       let cells = generateJewels(random), selected = null, pending = null, pointer = null, ignoreClick = false;
       const grid = node('div', 'arc-jewels'); grid.setAttribute('role', 'group'); grid.setAttribute('aria-label', 'Swap neighboring shapes to make three in a row');
-      body.append(grid); caption('SWAP NEIGHBORS · MAKE 3');
+      body.append(grid);
       const pieces = cells.map((_, i) => button('arc-gem', '', undefined, () => { if (ignoreClick) { ignoreClick = false; return; } choose(i); }));
       const paint = () => pieces.forEach((piece, i) => { piece.innerHTML = gem(cells[i]); piece.setAttribute('aria-label', `${names[cells[i]]}, row ${Math.floor(i / 4) + 1}, column ${i % 4 + 1}`); piece.setAttribute('aria-pressed', selected === i ? 'true' : 'false'); });
       const neighbor = (a, b) => Math.abs(a % 4 - b % 4) + Math.abs(Math.floor(a / 4) - Math.floor(b / 4)) === 1;
@@ -347,25 +363,27 @@
       hint.textContent = 'Tap or drag to aim, then press Shoot. Hit the three gold pegs. Arrow keys aim; Space shoots.';
     } else if (type === 'telescope') {
       const field = scene('Telescope. Drag the sky or use arrow keys to center the target planet in the crosshair.', true), id = `arc-scope-${++sceneSerial}`;
-      const defs = snode('defs'), clip = snode('clipPath', {id}); clip.append(snode('rect', {x: 2, y: 2, width: 196, height: 146, rx: 18})); defs.append(clip); field.append(defs);
-      const viewport = snode('g', {'clip-path': `url(#${id})`}), sky = snode('g'); viewport.append(snode('rect', {width: 200, height: 150, fill: '#27394e'}), sky); field.append(viewport);
+      const defs = snode('defs'), clip = snode('clipPath', {id}), aperture = snode('rect', {x: 0, y: 20, width: 200, height: 130, rx: 16}); clip.append(aperture); defs.append(clip); field.append(defs);
+      const viewport = snode('g', {'clip-path': `url(#${id})`}), sky = snode('g'), night = snode('rect', {width: 200, height: 150, fill: '#27394e'}); viewport.append(night, sky); field.append(viewport);
       for (let i = 0; i < 65; i++) sky.append(snode('circle', {cx: 15 + (i * 73 % 390), cy: 12 + (i * 113 % 295), r: i % 5 === 0 ? 1.4 : .7, fill: '#e7f1ef', opacity: .25 + (i % 4) * .15}));
       const planets = [{x: 80, y: 76}, {x: 337, y: 86}, {x: 93, y: 252}, {x: 324, y: 245}];
       const offset = integer(random, 4), target = integer(random, 4);
       const planetGraphic = (kind, x, y, scale = 1) => {
         const group = snode('g', {transform: `translate(${x} ${y}) scale(${scale})`});
+        if (kind === 2) group.append(snode('ellipse', {class: 'arc-ring-back', rx: 20, ry: 6, fill: 'none', stroke: '#c5a567', 'stroke-width': 3, transform: 'rotate(-25)'}));
         group.append(snode('circle', {r: 13, fill: colors[kind]}), snode('path', {d: 'M-9-7Q0-12 8-5M-11 1Q-1-5 11 2', fill: 'none', stroke: '#fff', opacity: '.28', 'stroke-width': 3}));
-        if (kind === 2) group.append(snode('ellipse', {rx: 20, ry: 6, fill: 'none', stroke: '#f4d491', 'stroke-width': 3, transform: 'rotate(-25)'}));
+        if (kind === 2) group.append(snode('path', {class: 'arc-ring-front', d: 'M-20 0A20 6 0 0 0 20 0', fill: 'none', stroke: '#f4d491', 'stroke-width': 3, transform: 'rotate(-25)'}));
         else if (kind === 1) group.append(snode('circle', {cx: 7, cy: 6, r: 4, fill: '#267786'}));
         else if (kind === 3) group.append(snode('circle', {cx: -4, cy: 5, r: 4, fill: '#bad18b'}));
         return group;
       };
       planets.forEach((planet, i) => sky.append(planetGraphic((i + offset) % 4, planet.x, planet.y)));
-      const reference = planetGraphic((target + offset) % 4, 30, 28, 1.2); reference.setAttribute('class', 'arc-target-planet'); field.append(reference);
+      const reference = planetGraphic((target + offset) % 4, 30, 20, 1.2); reference.setAttribute('class', 'arc-target-planet'); field.append(reference);
       const cross = snode('circle', {cx: 100, cy: 77, r: 18, fill: 'none', stroke: '#dceadc', 'stroke-width': 1, 'stroke-dasharray': '3 4'}), lock = snode('circle', {cx: 100, cy: 77, r: 22, fill: 'none', stroke: '#b9dea7', 'stroke-width': 3, 'stroke-dasharray': '0 139', transform: 'rotate(-90 100 77)'});
-      field.append(cross, lock, snode('path', {d: 'M100 50V55M100 99V104M73 77H78M122 77H127', stroke: '#e4ead8', 'stroke-width': 1}));
-      let camera = {x: 210, y: 160}, pointer = null, locked = 0;
-      const paint = () => { sky.setAttribute('transform', `translate(${100 - camera.x} ${77 - camera.y})`); field.setAttribute('aria-description', `View ${Math.round(camera.x)}, ${Math.round(camera.y)}. Target ${['coral', 'blue', 'ringed gold', 'green'][(target + offset) % 4]} planet.`); };
+      const reticle = snode('g'); reticle.append(cross, lock, snode('path', {d: 'M100 50V55M100 99V104M73 77H78M122 77H127', stroke: '#e4ead8', 'stroke-width': 1})); field.append(reticle);
+      let camera = {x: 210, y: 160}, pointer = null, locked = 0, centerY = 85;
+      const paint = () => { sky.setAttribute('transform', `translate(${100 - camera.x} ${centerY - camera.y})`); reticle.setAttribute('transform', `translate(0 ${centerY - 77})`); field.setAttribute('aria-description', `View ${Math.round(camera.x)}, ${Math.round(camera.y)}. Target ${['coral', 'blue', 'ringed gold', 'green'][(target + offset) % 4]} planet.`); };
+      fitScene(field, height => { aperture.setAttribute('height', height - 20); night.setAttribute('height', height); centerY = (height + 20) / 2; paint(); });
       listen(field, 'pointerdown', e => { if (pointer || e.button !== 0) return; e.preventDefault(); pointer = {id: e.pointerId, at: point(field, e), camera: {...camera}}; capture(field, e); });
       listen(field, 'pointermove', e => { if (pointer?.id !== e.pointerId) return; e.preventDefault(); const p = point(field, e); camera = {x: clamp(pointer.camera.x - p.x + pointer.at.x, 65, 355), y: clamp(pointer.camera.y - p.y + pointer.at.y, 65, 255)}; paint(); });
       const cancel = () => { pointer = null; release(field); };
@@ -381,7 +399,7 @@
       path.forEach((p, i) => { field.append(snode('rect', {class: 'arc-board-space', x: p.x - 14, y: p.y - 14, width: 28, height: 28, rx: 5, fill: i === goal ? '#efd282' : i % 2 ? '#e7ead8' : '#f9f5df', stroke: '#798d72', 'stroke-width': 1})); if (i > 0 && i < goal) field.append(snode('circle', {cx: p.x, cy: p.y, r: 2, fill: '#93a48a'})); });
       const reward = snode('g', {class: 'arc-reward', transform: `translate(${path[goal].x} ${path[goal].y})`}); reward.append(snode('rect', {x: -8, y: -5, width: 16, height: 13, rx: 2, fill: '#c87369'}), snode('path', {d: 'M0-5V8M-9-5H9M0-6C-14-15-5-18 0-6C14-15 5-18 0-6', fill: 'none', stroke: '#fff0c0', 'stroke-width': 2})); field.append(reward);
       const pawn = snode('g', {class: 'arc-pawn'}); pawn.append(snode('ellipse', {cy: 8, rx: 8, ry: 3, fill: '#304e4933'}), snode('path', {d: 'M-7 6Q-8-2-3-4H3Q8-2 7 6Z', fill: '#4f8792', stroke: '#f5f4df', 'stroke-width': 1.5}), snode('circle', {cy: -7, r: 5, fill: '#4f8792', stroke: '#f5f4df', 'stroke-width': 1.5})); field.append(pawn);
-      const status = snode('text', {x: 99, y: 76, 'text-anchor': 'middle', class: 'arc-board-status'}, `${goal} TO GO`); field.append(status);
+      const status = snode('text', {x: 99, y: 76, 'text-anchor': 'middle', class: 'arc-board-status'}, ''); field.append(status);
       const controls = node('div', 'arc-board-dice'); body.append(controls);
       let position = 0, motion = null;
       const dice = values.map((value, i) => button('arc-die', '', undefined, () => {
@@ -398,7 +416,7 @@
       tickers.push(() => {
         if (!motion || age < motion.start) return;
         dice[motion.die].classList.remove('is-rolling');
-        if (motion.resetAt) { if (age >= motion.resetAt) { position = 0; used.clear(); paint(path[0]); status.textContent = `${goal} TO GO`; motion = null; paintDice(); } return; }
+        if (motion.resetAt) { if (age >= motion.resetAt) { position = 0; used.clear(); paint(path[0]); status.textContent = ''; motion = null; paintDice(); } return; }
         const progress = Math.min(motion.steps, (age - motion.start) / 150), step = Math.floor(progress), t = progress - step;
         const fromIndex = motion.from + step, a = waypoint(fromIndex), b = waypoint(fromIndex + 1);
         paint({x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t - Math.sin(t * Math.PI) * 7});
@@ -407,23 +425,35 @@
         dice[motion.die].classList.add('is-used');
         if (position === goal) { paint(path[goal]); status.textContent = 'A LITTLE GIFT!'; reward.classList.add('is-won'); hint.textContent = 'Landed exactly on the gift'; finish(); }
         else if (position > goal || used.size === 4) { paint(waypoint(position)); status.textContent = position > goal ? 'TOO FAR · RETRY' : 'TRY AGAIN'; hint.textContent = 'Back to the start. Try a different combination of the same dice.'; onFeedback('error'); motion.resetAt = age + 450; }
-        else { paint(path[position]); status.textContent = `${goal - position} TO GO`; hint.textContent = `${goal - position} spaces to the gift`; motion = null; paintDice(); }
+        else { paint(path[position]); status.textContent = ''; hint.textContent = 'Choose another die'; motion = null; paintDice(); }
       });
       paint(path[0]); paintDice(); hint.textContent = 'Choose from the four dice. Each can be used once. Land exactly on the gift.';
     } else if (type === 'golf') {
       const field = scene('Mini golf. Drag back from the ball and release to putt. Keyboard: left/right aim, up/down power, Space to shoot.', true);
       const {start, hole, obstacles, turf} = generateGolf(random);
-      let ball = {...start, vx: 0, vy: 0}, moving = false, drag = null, keyboardAngle = Math.atan2(hole.y - start.y, hole.x - start.x) * 180 / Math.PI, power = 34;
+      let ball = {...start, vx: 0, vy: 0}, moving = false, drag = null, keyboardAngle = Math.atan2(hole.y - start.y, hole.x - start.x) * 180 / Math.PI, power = 34, courseHeight = 150;
       const stripes = ['M13 102Q85 70 186 92M13 58Q115 31 185 53', 'M48 14Q74 80 43 136M116 14Q146 80 113 136', 'M12 118L167 12M38 140L192 36'];
-      field.append(snode('rect', {x: 4, y: 4, width: 192, height: 142, rx: 18, fill: ['#8fb78b', '#8eaf94', '#a2bc88'][turf], stroke: '#496f55', 'stroke-width': 5}), snode('path', {d: stripes[turf], fill: 'none', stroke: '#d1e0b5', opacity: '.3', 'stroke-width': 17}));
+      const course = snode('rect', {x: 3, y: 3, width: 194, height: 144, rx: 16, fill: ['#8fb78b', '#8eaf94', '#a2bc88'][turf], stroke: '#496f55', 'stroke-width': 5});
+      const grass = snode('path', {d: stripes[turf], fill: 'none', stroke: '#d1e0b5', opacity: '.3', 'stroke-width': 17});
+      const clipId = `arc-course-${++sceneSerial}`, defs = snode('defs'), clip = snode('clipPath', {id: clipId}), grassBounds = snode('rect', {x: 6, y: 6, width: 188, height: 138, rx: 13});
+      clip.append(grassBounds); defs.append(clip); const grassLayer = snode('g', {'clip-path': `url(#${clipId})`}); grassLayer.append(grass); field.append(defs, course, grassLayer);
       obstacles.forEach(obstacle => {
-        if (obstacle.kind === 'wall') field.append(snode('rect', {class: 'arc-golf-wall', x: obstacle.x - obstacle.w / 2, y: obstacle.y - obstacle.h / 2, width: obstacle.w, height: obstacle.h, rx: 3, fill: '#d2c596', stroke: '#f4e9bd', 'stroke-width': 2}));
-        else field.append(snode('circle', {cx: obstacle.x, cy: obstacle.y, r: obstacle.r + 2, fill: '#547755'}), snode('circle', {class: 'arc-golf-bumper', cx: obstacle.x, cy: obstacle.y, r: obstacle.r, fill: '#bfd3a0', stroke: '#edf0c8', 'stroke-width': 2}));
+        obstacle.el = snode('g'); field.append(obstacle.el);
+        if (obstacle.kind === 'wall') obstacle.el.append(snode('rect', {class: 'arc-golf-wall', x: -obstacle.w / 2, y: -obstacle.h / 2, width: obstacle.w, height: obstacle.h, rx: 3, fill: '#d2c596', stroke: '#f4e9bd', 'stroke-width': 2}));
+        else obstacle.el.append(snode('circle', {r: obstacle.r + 2, fill: '#547755'}), snode('circle', {class: 'arc-golf-bumper', r: obstacle.r, fill: '#bfd3a0', stroke: '#edf0c8', 'stroke-width': 2}));
+        obstacle.el.setAttribute('transform', `translate(${obstacle.x} ${obstacle.y})`);
       });
-      field.append(snode('circle', {class: 'arc-golf-hole', cx: hole.x, cy: hole.y, r: 8, fill: '#293f35', stroke: '#d6e5b9', 'stroke-width': 2}), snode('path', {d: `M${hole.x} ${hole.y - 2}v-22l14 5-14 5`, fill: '#efb269', stroke: '#fff2d3', 'stroke-width': 1.5, 'stroke-linejoin': 'round'}));
+      const cup = snode('circle', {class: 'arc-golf-hole', cx: hole.x, cy: hole.y, r: 8, fill: '#293f35', stroke: '#d6e5b9', 'stroke-width': 2}), flag = snode('path', {d: `M${hole.x} ${hole.y - 2}v-22l14 5-14 5`, fill: '#efb269', stroke: '#fff2d3', 'stroke-width': 1.5, 'stroke-linejoin': 'round'}); field.append(cup, flag);
       const guide = snode('path', {class: 'arc-golf-guide', visibility: 'hidden'}), grip = snode('circle', {cx: ball.x, cy: ball.y, r: 12, fill: 'none', stroke: '#eef4d9', 'stroke-width': 1, opacity: '.7'}), ballEl = snode('circle', {cx: ball.x, cy: ball.y, r: 5, fill: '#fffef3', stroke: '#516f59', 'stroke-width': 1, class: 'arc-golf-ball'});
-      field.append(guide, grip, ballEl); const label = caption('PULL BACK · RELEASE');
+      field.append(guide, grip, ballEl); const label = hint;
       const paintBall = () => { attr(ballEl, {cx: ball.x, cy: ball.y}); attr(grip, {cx: ball.x, cy: ball.y, visibility: moving ? 'hidden' : 'visible'}); };
+      fitScene(field, height => {
+        const ratio = height / courseHeight;
+        ball.y *= ratio; ball.vy *= ratio; hole.y *= ratio; courseHeight = height;
+        course.setAttribute('height', height - 6); grassBounds.setAttribute('height', height - 12); grass.setAttribute('transform', `scale(1 ${height / 150})`);
+        obstacles.forEach(obstacle => { obstacle.y *= ratio; obstacle.el.setAttribute('transform', `translate(${obstacle.x} ${obstacle.y})`); });
+        cup.setAttribute('cy', hole.y); flag.setAttribute('d', `M${hole.x} ${hole.y - 2}v-22l14 5-14 5`); paintBall();
+      });
       const aim = (dx, dy) => {
         const size = Math.hypot(dx, dy), factor = size > 60 ? 60 / size : 1;
         dx *= factor; dy *= factor;
@@ -445,7 +475,7 @@
       });
       tickers.push(dt => {
         if (!moving) return;
-        const sunk = advanceBall(ball, dt / 1000, {friction: 1.35, radius: 5, top: 4, bottom: 146, left: 4, right: 196, bounce: .7, obstacles, hole}); paintBall();
+        const sunk = advanceBall(ball, dt / 1000, {friction: 1.35, radius: 5, top: 4, bottom: courseHeight - 4, left: 4, right: 196, bounce: .7, obstacles, hole}); paintBall();
         if (sunk) { moving = false; ballEl.classList.add('is-sunk'); label.textContent = 'IN THE CUP!'; hint.textContent = 'Ball in the hole'; finish(); }
         else if (Math.hypot(ball.vx, ball.vy) < 6) { moving = false; ball.vx = ball.vy = 0; paintBall(); label.textContent = 'PULL BACK · RELEASE'; }
       });

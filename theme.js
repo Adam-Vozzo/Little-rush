@@ -139,7 +139,7 @@
     const state = runtime = {
       entries: new Map(), renderer: null, failed: false, disposed: false,
       raf: 0, queued: false, dirty: true, lastDraw: null, seconds: 0,
-      reduced: !!motion?.matches, paused: false, pointer: null, touches: new Map(),
+      reduced: !!motion?.matches, paused: false, pointer: null, touches: new Map(), tiltRects: new Map(),
       mutation: null, resize: null, removers: [], reason: '',
     };
     root.dataset.foilRenderer = 'css';
@@ -157,6 +157,7 @@
       entry.canvas.remove(); entry.canvas.width = entry.canvas.height = 1;
       tile.removeAttribute('data-foil-ready'); state.entries.delete(tile);
       state.touches.delete(tile);
+      state.tiltRects.delete(tile);
       tile.style.removeProperty('--foil-rx'); tile.style.removeProperty('--foil-ry'); tile.classList.remove('foil-touch');
     };
     const fallBack = reason => {
@@ -269,7 +270,8 @@
       if (state.reduced || state.paused || !tile || tile.classList.contains('is-solved')) return;
       // Keep direct manipulation in a stable plane; the foil still follows the pointer.
       if (['shapes', 'maze', 'level', 'catch'].includes(tile.dataset.game)) return;
-      const rect = tile.getBoundingClientRect();
+      const rect = state.tiltRects.get(tile);
+      if (!rect) return;
       const x = clamp((event.clientX - rect.left) / rect.width, 0, 1) - .5;
       const y = clamp((event.clientY - rect.top) / rect.height, 0, 1) - .5;
       tile.style.setProperty('--foil-rx', `${(-y * 4).toFixed(2)}deg`);
@@ -278,24 +280,27 @@
     const releaseTilts = pointerId => {
       for (const [tile, point] of state.touches) {
         if (pointerId !== undefined && point[2] !== pointerId) continue;
-        tile.style.removeProperty('--foil-rx'); tile.style.removeProperty('--foil-ry'); tile.classList.remove('foil-touch'); state.touches.delete(tile);
+        tile.style.removeProperty('--foil-rx'); tile.style.removeProperty('--foil-ry'); tile.classList.remove('foil-touch'); state.touches.delete(tile); state.tiltRects.delete(tile);
       }
     };
     listen(document, 'pointerdown', event => {
-      const tile = event.target.closest?.('#game-board .tile:not(.empty)');
+      const tile = event.target.closest?.('.tile:not(.empty):not(.game-preview)');
       if (!tile || state.reduced || state.paused) return;
+      if (state.touches.has(tile)) return;
+      tile.classList.remove('new-tile');
+      state.tiltRects.set(tile, tile.getBoundingClientRect());
       state.pointer = [event.clientX, event.clientY]; state.touches.set(tile, [event.clientX, event.clientY, event.pointerId]);
       tile.classList.add('foil-touch'); tilt(tile, event);
-    }, { passive: true });
+    }, { passive: true, capture: true });
     listen(document, 'pointermove', event => {
       if (state.reduced) return;
       state.pointer = [event.clientX, event.clientY];
       for (const [tile, point] of state.touches) if (point[2] === event.pointerId) { state.touches.set(tile, [event.clientX, event.clientY, event.pointerId]); tilt(tile, event); }
       if (!state.paused) requestFrame();
-    }, { passive: true });
+    }, { passive: true, capture: true });
     listen(document, 'pointerleave', () => { state.pointer = null; });
-    listen(document, 'pointerup', event => releaseTilts(event.pointerId), { passive: true });
-    listen(document, 'pointercancel', event => releaseTilts(event.pointerId), { passive: true });
+    listen(document, 'pointerup', event => releaseTilts(event.pointerId), { passive: true, capture: true });
+    listen(document, 'pointercancel', event => releaseTilts(event.pointerId), { passive: true, capture: true });
     listen(window, 'blur', () => releaseTilts());
     const motionChanged = event => {
       state.reduced = !!event.matches; state.dirty = true; state.lastDraw = null;
