@@ -1,6 +1,6 @@
 # Little Rush
 
-A mobile-first 2D micro-game collection with 29 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.10.0 fills the tile play areas, unifies the shape artwork, and makes holofoil tilt track drags immediately. Pop Six keeps its rack between shots. Zen has only one cocoon per run. No libraries, external assets, account or network connection are required to play.
+A mobile-first 2D micro-game collection with 29 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.11.0 adds live cardinal drag feedback, a peg rebound guide, and more varied planet and board layouts. Refined controls and flat artwork keep the games clear at small sizes. No libraries, external assets, account or network connection are required to play.
 
 ## Play
 
@@ -26,7 +26,7 @@ Future pushes to `main` update the site automatically. See [GitHub's publishing-
 - On Normal, every tile has **25 seconds**. Its filled top-right circle empties as time runs out and turns red in the final 4 seconds. A single expired tile ends the run.
 - **WAIT & HATCH** can appear randomly during the run: wait 3 seconds for the caterpillar to become a chrysalis, then tap to release a butterfly. It appears only once per run. **CRACK IT** games are geodes: tap a randomized 5–11 times to crack the shell and reveal glowing crystals.
 - The butterfly flutters over the board for the rest of that run. Hatching unlocks **FEED BUTTERFLY** when that game is enabled, queuing it for the next spawn. Later Feed tiles can appear randomly, with at most one active at a time in timed modes.
-- Drag nectar out of its tile to the butterfly. It keeps flying while you carry nectar. A missed drop can be retried. Keyboard users can select nectar with Enter and then activate the focused butterfly.
+- Drag a flower out of its tile to the butterfly. It keeps flying while you carry the flower. A missed drop can be retried. Keyboard users can select the flower with Enter and then activate the focused butterfly.
 - Complete tiles in any order. Wrong inputs can be retried. Pause freezes game time, animations and spawn scheduling; leaving the tab pauses automatically. Restart clears the butterfly and Feed unlock.
 - During timed play, a compact bar shows elapsed time, cleared count and pause. Each tile's title states its objective. Controls fill the remaining tile space, with compact prompts for arcade controls and progress. Essential puzzle content, such as a wire's target endpoints, stays visible; detailed state updates remain available to screen readers. Sound is optional and initially off.
 
@@ -69,7 +69,7 @@ Tile colors identify five consistent categories:
 | Sage | Dexterity | Turn Upright, Stop in the Green, Hold, Sign Here, Catch It, Match, Tap Targets |
 | Peach | Nature | Wait & Hatch, Crack It, Upload, Feed Butterfly |
 
-## The 23 games
+## The 29 games
 
 | Game | Action |
 | --- | --- |
@@ -79,7 +79,7 @@ Tile colors identify five consistent categories:
 | TAP IN ORDER | Tap numbers from 1 to 4. |
 | TURN ON | Turn all six switches on. They are arranged in two columns of three, and 1–4 start on at random. |
 | REPEAT | Press the round Start button between four full quadrant panels, then watch and repeat a three-color sequence. |
-| STOP IN THE GREEN | Tap the inset lower button while the moving dot is inside the green zone. A miss locks the button for 750ms while the dot keeps moving. |
+| STOP IN THE GREEN | Tap the inset lower button while the moving dot is inside the green zone, which starts in a random position each game. A miss locks the button for 750ms while the dot keeps moving. |
 | HOLD | Hold the button continuously for one second. |
 | MATCH SHAPES | Drag all three shapes to their matching outline slots. |
 | CUT THE WIRE | Trace randomly labelled letter/digit endpoints and cut the requested wire. |
@@ -88,20 +88,20 @@ Tile colors identify five consistent categories:
 | DRAG TO EXIT | Draw a smooth path through a generated 5×5 maze. The dot follows continuously, sliding along walls without crossing them; arrow keys remain available. |
 | SIGN HERE | Draw any sufficiently long signature inside the box, then lift your finger. |
 | REMEMBER | Remember a five-character code containing letters and digits. Press Start to hide it and reveal the keys. A mistake reveals it again for a deliberate retry. |
-| SLIDE TO MARKS | Grab and slide three large knobs into the wider target marks. No visible target numbers; tapping the track does not move them. |
-| CATCH IT | Move the claw with the bottom left/right arrows or drag it, then press the center Drop button. Hold an arrow for continuous movement from the first frame, tap for a tiny nudge, then release for a stronger, naturally settling momentum swing. The rod extends over 700ms, pauses to grab, and retracts before completion. |
+| SLIDE TO MARKS | Drag three tall rectangular handles along full-height tracks into the green target areas. No visible target numbers or center ticks; tapping the track does not move them. |
+| CATCH IT | Move the claw with the bottom left/right arrows, then press the center Drop button. Hold an arrow for continuous movement from the first frame, tap for a tiny nudge, then release for a stronger, naturally settling momentum swing. The rod extends over 700ms, pauses to grab, and retracts before completion. |
 | UPLOAD | Tap Upload, wait for the three-second progress bar, then tap Complete. |
 | JOIN PIPES | Rotate six pipe segments to connect the two endpoints of a generated puzzle. |
 | TAP LOW TO HIGH | Tap the dice in ascending dot-count order. |
 | MATCH | Tap anywhere in the tile when both the scrolling color and shape match the reference. A miss has a 750ms cooldown while scrolling continues. |
 | TAP TARGETS | Press Start. Six circles spawn at 500ms intervals over three seconds, each fading and scaling in for 500ms. Tap each within its next 500ms or the tile resets for another attempt. |
 | POP SIX | Tap or drag anywhere in the field to aim, then press Shoot. Connect three same-color balls; clear six in total. Random racks have varied colors and silhouettes, with an exposed matching pair. Shots rebound off side walls. Unpopped balls stay in place between shots, including misses and low attachments. Arrow keys aim and Space shoots. |
-| MAKE THREE | Tap two neighboring shapes or swipe one to swap. Make a horizontal or vertical line of three. Invalid swaps return; every board has a solution. |
-| HIT THREE PEGS | Tap or drag to aim from above, then press Shoot. The ball falls and rebounds; hit all three marked gold pegs across as many shots as needed. Each field randomizes the peg positions and count with safe gaps. Arrow keys aim and Space shoots. |
-| FIND THE PLANET | Drag the enlarged sky view, or use arrow keys. Center the planet matching the large reference straddling the telescope edge for 400ms to lock on. A ring indicates progress without extra text. |
-| LAND ON THE GIFT | Choose from four fixed dice, using each at most once. Reach a gift 6–12 spaces away, depending on the randomized path. At least one combination lands exactly. Overshooting restores the same four dice and sends the pawn back to the start; no new dice appear between moves. |
-| PUTT IT IN | Drag back from the ball to aim and set power, then release. Courses vary the start, cup, turf, and round or rectangular obstacles. The start and cup are at least 90 game units apart. Keep putting until the ball drops into the cup. Arrow keys adjust aim/power; Space shoots. |
-| FEED BUTTERFLY | Drag nectar across the board to the unlocked butterfly. |
+| MAKE THREE | Tap two neighboring shapes or drag a tile to swap. The tile follows one cardinal direction while its neighbor shifts in response. Make a horizontal or vertical line of three. Invalid swaps return; every board has a solution. |
+| HIT THREE PEGS | Tap or drag to aim from above, then press Shoot. The preview follows the shot physics and shows the first rebound when it reaches a peg. Hit all three marked gold pegs across as many shots as needed. Each field randomizes the peg positions and count with safe gaps. Arrow keys aim and Space shoots. |
+| FIND THE PLANET | Drag the enlarged sky view, or use arrow keys. The four planets have fresh, separated positions each game. Center the planet matching the large reference straddling the telescope edge for 400ms to lock on. A ring indicates progress without extra text. |
+| LAND ON THE GIFT | Choose from four fixed dice, using each at most once. Reach a gift 6–12 spaces away along a freshly generated sequence of separated steps. At least one combination lands exactly. Overshooting restores the same four dice and sends the pawn back to the start; no new dice appear between moves. |
+| PUTT IT IN | Drag back from the ball to aim and set power, then release. A solid line behind the ball changes from white to red as power increases. Courses vary the start, cup, turf, and round or rectangular obstacles. The start and cup are at least 90 game units apart. Keep putting until the ball drops into the cup. Arrow keys adjust aim/power; Space shoots. |
+| FEED BUTTERFLY | Drag a smiling flower across the board to the unlocked butterfly. |
 
 Select **Let's play** on the title screen to start a run. The play screen gives most of the portrait viewport to its eight square tiles. The compact header, six-pixel tile padding and larger controls accommodate both touch and mouse input; keyboard alternatives are also available for the supported interactions.
 
@@ -111,7 +111,7 @@ Select **Let's play** on the title screen to start a run. The play screen gives 
 - `microgames.js` and `microgames.css`: ten core games, including hatch, geode, wire, switch and shape interactions.
 - `extra-games.js` and `extra-games.css`: twelve additional games, pure puzzle generators, and the shared thumb-only slider control.
 - `arcade-games.js` and `arcade-games.css`: six arcade games, shared aiming controls, substepped ball physics and a solvable match-three generator.
-- `butterfly.js` and `butterfly.css`: persistent butterfly and cross-board nectar drag interaction.
+- `butterfly.js` and `butterfly.css`: persistent butterfly and cross-board flower drag interaction.
 - `previews.js`: isolated practice clocks, completion resets, visibility pausing, and the practice butterfly.
 - `app.js`: title and play screens, the one-time hatch and Feed gating, Tweaks selections, countdowns, sounds and local daily/all-time records.
 - `styles.css`: compact responsive portrait board, title screen and dialogs.
@@ -125,6 +125,6 @@ Add a pack with `LittleRushGames.register(catalogEntries, mountFunction)`. Each 
 
 Run `npm test` / `node --test tests/*.test.cjs`. Tests cover all 29 games, 2.5-second spawns, 25-second deadline boundaries, full-board handling, queue/unlock logic, pointer ownership, cooldowns, upload states, pause/restart/expiry cleanup, and the integrated hatch-to-feed lifecycle. Generated layouts are checked across hundreds of seeds: solvable match-three and fixed-dice boards, connected bubble racks, separated pegs, and traversable golf courses. Shot solvers exercise randomized peg fields and golf completion at 30, 60 and 120fps. Regression checks cover persistent bubble racks, responsive field coordinates, and continuous tilt with cancellation and reduced motion. DOM test doubles verify logic; browser checks verify rendered layout and real pointer behavior.
 
-The browser QA checklist includes the hatch-to-butterfly-to-nectar sequence, shape drops, wire cuts, bounded switch knobs, slider and claw drags, ignored track taps, upload progression, generated maze routes and blocked wall shortcuts, pipe solutions, geode reveal, math cooldown, compact tile layouts, portrait phone sizes, records, and persistent Tweaks selections. Check both Styles choices, saved theme restoration, Holofoil's reduced-motion behavior and its WebGL fallback. Also check loading and starting with every asset served under a `/Little-rush/` path. No physical iOS/Android device testing has been performed.
+The browser QA checklist includes the hatch-to-butterfly-to-flower sequence, shape drops, wire cuts, bounded switch knobs, slider and shape-tile drags, claw arrow controls, ignored track taps, upload progression, generated maze routes and blocked wall shortcuts, pipe solutions, geode reveal, math cooldown, compact tile layouts, portrait phone sizes, records, and persistent Tweaks selections. Check both Styles choices, saved theme restoration, Holofoil's reduced-motion behavior and its WebGL fallback. Also check loading and starting with every asset served under a `/Little-rush/` path. No physical iOS/Android device testing has been performed.
 
 For isolated interaction checks, open `/tests/playground.html` from the local server. It exposes the full catalog without run deadlines and lets you inspect 128px, 174px and 211px tiles.

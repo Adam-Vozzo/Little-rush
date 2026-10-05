@@ -15,7 +15,7 @@
 .arc-fire { font-size: clamp(9px, 6.7cqw, 13px) !important; font-weight: 650 !important; letter-spacing: .04em; }
 .arc-guide { fill: none; stroke: #587568; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 1 8; opacity: .5; }
 .arc-barrel { fill: none; stroke: #53796c; stroke-width: 10; stroke-linecap: round; }
-.arc-bubble { stroke: #fff9; stroke-width: 1.4; }
+.arc-bubble { stroke: none; }
 .arc-bubble-piece { transition: opacity .24s; }
 .arc-bubble-piece.is-popped { opacity: 0; }
 .arc-bubble-piece.is-popped circle { transform: scale(1.25); transition: transform .24s ease-out; }
@@ -25,6 +25,8 @@
 .mg .arc-gem[aria-pressed=true] { background: #fffff6; box-shadow: inset 0 0 0 2px #74898c; z-index: 1; }
 .mg .arc-gem:active { transform: none; }
 .mg .arc-gem.is-teleport { transition: none; }
+.mg .arc-gem.is-dragging { transition: none; z-index: 2; }
+.arc-rebound { opacity: .38; stroke-dasharray: 2 5; }
 .arc-gem.is-cleared svg { animation: arc-gem-clear .42s ease-in forwards; }
 @keyframes arc-gem-clear { 0%,25% { scale: 1; opacity: 1; } 45% { scale: 1.13; } 100% { scale: .2; opacity: 0; } }
 .arc-peg circle { fill: #8da6aa; stroke: #fbf8ee; stroke-width: 1.5; }
@@ -39,7 +41,7 @@
 .arc-die.is-rolling { animation: arc-die-toss .23s ease-out; }
 @keyframes arc-die-toss { 30% { translate: 0 -3px; rotate: -12deg; } 70% { rotate: 8deg; } }
 .arc-reward.is-won { filter: drop-shadow(0 0 5px #ffd482); }
-.arc-golf-guide { fill: none; stroke: #fff5bb; stroke-width: 2; stroke-dasharray: 3 4; stroke-linecap: round; }
+.arc-golf-guide { fill: none; stroke-width: 3; stroke-linecap: round; }
 .arc-golf-ball.is-sunk { opacity: 0; transition: opacity .25s; }
 .mg-golf .arc-scene { cursor: crosshair; }
 @media (prefers-reduced-motion: reduce) { .arc-gem.is-cleared svg { opacity: .15; } }

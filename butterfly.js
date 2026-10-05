@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const butterflyArt = `<svg viewBox="0 0 80 70" aria-hidden="true"><g class="butterfly-left"><path d="M39 34C28 8 5 8 7 29c1 13 18 16 30 13C19 38 11 49 20 58c10 8 18-3 20-17" fill="#d599b1" stroke="#725c78" stroke-width="1.4"/><path d="M32 33C23 19 13 20 16 30c2 6 10 8 16 3" fill="#f2dbce"/><circle cx="25" cy="49" r="4" fill="#f6e8c2"/></g><g class="butterfly-right"><path d="M41 34C52 8 75 8 73 29c-1 13-18 16-30 13 18-4 26 7 17 16-10 8-18-3-20-17" fill="#b9afd8" stroke="#725c78" stroke-width="1.4"/><path d="M48 33c9-14 19-13 16-3-2 6-10 8-16 3" fill="#f2dbce"/><circle cx="55" cy="49" r="4" fill="#f6e8c2"/></g><path d="M40 26v23" stroke="#52654e" stroke-width="4" stroke-linecap="round"/><path d="m39 26-6-8m8 8 6-8" stroke="#52654e" stroke-width="1.5" stroke-linecap="round"/><circle cx="40" cy="26" r="3.5" fill="#52654e"/></svg>`;
-  const nectarArt = `<svg viewBox="0 0 80 80" aria-hidden="true"><path d="M40 10C34 24 18 39 18 51a22 22 0 0 0 44 0C62 39 46 24 40 10Z" fill="#e2b56e" stroke="#a37c49" stroke-width="1.5"/><path d="M29 42c-4 7-5 13-1 17" stroke="#fff5d9" stroke-width="4" stroke-linecap="round"/><path d="m54 8 2 6 6 2-6 2-2 6-2-6-6-2 6-2z" fill="#9aaf80"/></svg>`;
+  const flowerArt = `<svg viewBox="0 0 80 80" aria-hidden="true"><path d="M40 38Q46 56 40 74" fill="none" stroke="#638d58" stroke-width="4" stroke-linecap="round"/><path d="M43 65Q24 68 22 51Q38 50 43 65M43 59Q59 61 63 46Q49 45 43 59" fill="#81aa68"/><g class="flower-petals" transform="translate(40 31)" fill="#e888a4">${[0,72,144,216,288].map(angle => `<ellipse cy="-13" rx="10" ry="14" transform="rotate(${angle})"/>`).join('')}</g><circle cx="40" cy="31" r="11" fill="#f2cc69"/><g fill="#805a43"><circle cx="36" cy="30" r="1.3"/><circle cx="44" cy="30" r="1.3"/></g><path d="M37 35Q40 38 43 35" fill="none" stroke="#805a43" stroke-width="1.4" stroke-linecap="round"/></svg>`;
 
   class Habitat {
     constructor(container) {
@@ -12,7 +12,7 @@
       this.button = document.createElement('button');
       this.button.type = 'button';
       this.button.className = 'board-butterfly';
-      this.button.setAttribute('aria-label', 'Butterfly. Select nectar in a Feed tile to feed it.');
+      this.button.setAttribute('aria-label', 'Butterfly. Select a flower in a Feed tile to feed it.');
       this.button.innerHTML = butterflyArt + '<span class="butterfly-message" aria-hidden="true">feed me</span>';
       this.button.tabIndex = -1;
       this.button.hidden = true;
@@ -77,7 +77,7 @@
       this.offer = null;
       this.layer.classList.remove('carrying-nectar');
       this.button.tabIndex = -1;
-      this.button.setAttribute('aria-label', 'Butterfly. Select nectar in a Feed tile to feed it.');
+      this.button.setAttribute('aria-label', 'Butterfly. Select a flower in a Feed tile to feed it.');
       previous.onCancel();
     }
     hitTest(x, y) {
@@ -118,7 +118,7 @@
     const {demo = false, onComplete = () => {}, onFeedback = () => {}, butterfly} = options;
     const root = document.createElement('div');
     root.className = 'mg mg-feed';
-    root.innerHTML = `<div class="mg-body"><button type="button" class="nectar-button" aria-label="Nectar. Drag to the butterfly, or press Enter to select.">${nectarArt}</button><span class="nectar-label">a little nectar</span></div><div class="mg-hint">Drag to the butterfly</div>`;
+    root.innerHTML = `<div class="mg-body"><button type="button" class="nectar-button" aria-label="Flower. Drag to the butterfly, or press Enter to select.">${flowerArt}</button></div><div class="mg-hint">Drag to the butterfly</div>`;
     container.append(root);
     const button = root.querySelector('button');
     const hint = root.querySelector('.mg-hint');
@@ -166,7 +166,7 @@
       button.setPointerCapture(pointer);
       ghost = document.createElement('div');
       ghost.className = 'nectar-ghost';
-      ghost.innerHTML = nectarArt;
+      ghost.innerHTML = flowerArt;
       // A practice tile lives in the dialog's top layer, above the document.
       (container.closest?.('dialog') || document.body).append(ghost);
       moveGhost(event);

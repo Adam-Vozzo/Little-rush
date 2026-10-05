@@ -22,7 +22,7 @@
     '<path d="M20 5 35 20 20 35 5 20Z"/>',
     '<rect x="9" y="9" width="22" height="22" rx="3"/>',
   ];
-  const gem = kind => svgText(`<g fill="currentColor" color="${['#b95260', '#427d9e', '#c49a35', '#548453'][kind]}" stroke="none">${gemPaths[kind]}</g>`);
+  const gem = kind => svgText(`<g fill="currentColor" color="${['#d94767', '#218fbe', '#e4b12c', '#429a65'][kind]}" stroke="none">${gemPaths[kind]}</g>`);
   function matches(cells, size = 4) {
     const found = new Set();
     for (let i = 0; i < cells.length; i++) {
@@ -103,11 +103,30 @@
       if (chosen.length >= 2 && chosen.length <= 3 && total >= 6 && total <= 12) options.push(total);
     }
     const goal = options[integer(random, options.length)];
-    const path = Array.from({length: goal + 1}, (_, i) => {
-      const along = i / goal * 390;
-      return along <= 154 ? {x: 23 + along, y: 116} : along <= 236 ? {x: 177, y: 116 - (along - 154)} : {x: 177 - (along - 236), y: 34};
-    });
+    const neighbors = cell => [cell % 6 ? cell - 1 : -1, cell % 6 < 5 ? cell + 1 : -1, cell - 6, cell + 6].filter(next => next >= 0 && next < 24);
+    let route = [], visits = 0;
+    const walk = cell => {
+      if (++visits > 3000) return false;
+      route.push(cell);
+      if (route.length === goal + 1) return true;
+      for (const next of shuffle(neighbors(cell), random)) {
+        if (route.includes(next) || neighbors(next).some(n => n !== cell && route.includes(n))) continue;
+        if (walk(next)) return true;
+      }
+      route.pop(); return false;
+    };
+    if (!walk(integer(random, 24))) route = [0, 1, 2, 3, 4, 5, 11, 17, 16, 15, 14, 13, 12].slice(0, goal + 1);
+    const path = route.map(cell => ({x: 22 + cell % 6 * 31, y: 28 + Math.floor(cell / 6) * 31}));
     return {values, goal, path};
+  }
+  function generatePlanets(random = Math.random) {
+    const planets = [], add = p => {
+      if (distance(p, {x: 210, y: 160}) < 60 || planets.some(other => distance(p, other) < 78)) return;
+      planets.push(p);
+    };
+    for (let attempt = 0; attempt < 200 && planets.length < 4; attempt++) add({x: 75 + random() * 270, y: 75 + random() * 170});
+    for (const y of [75, 160, 245]) for (const x of [75, 165, 255, 345]) if (planets.length < 4) add({x, y});
+    return planets;
   }
   const obstacleDistance = (p, obstacle) => obstacle.kind === 'wall'
     ? Math.hypot(Math.max(Math.abs(p.x - obstacle.x) - obstacle.w / 2, 0), Math.max(Math.abs(p.y - obstacle.y) - obstacle.h / 2, 0))
@@ -162,7 +181,23 @@
     }
     return false;
   }
-  window.LittleRushArcade = { matches, swaps, generateJewels, bubblePoint, bubbleCluster, generateBubbles, generatePegs, generateBoard, generateGolf, obstacleDistance, advanceBall };
+  const pegLaunch = angle => ({x: 100 + Math.sin(radians(angle)) * 18, y: 5 + Math.cos(radians(angle)) * 18, vx: Math.sin(radians(angle)) * 165, vy: Math.cos(radians(angle)) * 165});
+  function pegPreview(angle, pegs) {
+    const ball = pegLaunch(angle), obstacles = pegs.map(({x, y, r, hit}) => ({x, y, r, hit}));
+    const primary = [{x: ball.x, y: ball.y}], rebound = [];
+    let hits = 0, after = 0;
+    for (let step = 0; step < 190; step++) {
+      const before = hits;
+      advanceBall(ball, 1 / 240, {gravity: 180, bounce: .9, obstacles, onHit: peg => { peg.hit = true; hits++; }});
+      const p = {x: ball.x, y: ball.y};
+      if (!before && hits) { primary.push(p); rebound.push(p); }
+      else if (step % 3 === 0 || hits > before) (hits ? rebound : primary).push(p);
+      if (hits) after++;
+      if (hits >= 2 || after >= 54 || !hits && step >= 131 || ball.y > 150) break;
+    }
+    return {primary, rebound};
+  }
+  window.LittleRushArcade = { matches, swaps, generateJewels, bubblePoint, bubbleCluster, generateBubbles, generatePegs, generateBoard, generatePlanets, generateGolf, obstacleDistance, advanceBall, pegLaunch, pegPreview };
   let sceneSerial = 0;
 
   function mount(container, type, {demo = false, random = Math.random, onComplete = () => {}, onFeedback = () => {}} = {}) {
@@ -228,7 +263,7 @@
         for (let i = 0; i < 35; i++) { x += vx; y += vy; if (x < 11 || x > 189) { x = clamp(x, 11, 189); vx *= -1; } if (y < 10 || balls.some(ball => distance(ball, {x, y}) < 23)) break; d += `L${x} ${y}`; }
         guide.setAttribute('d', d);
       };
-      const makeBall = (row, col, value) => { const ball = {...bubblePoint(row, col), row, col, color: value}; ball.el = snode('g', {class: 'arc-bubble-piece', transform: `translate(${ball.x} ${ball.y})`}); ball.el.append(snode('circle', {r: 11, fill: colors[value], class: 'arc-bubble'}), snode('ellipse', {cx: -3, cy: -4, rx: 4, ry: 2.5, fill: '#fff', opacity: '.52'})); layer.append(ball.el); return ball; };
+      const makeBall = (row, col, value) => { const ball = {...bubblePoint(row, col), row, col, color: value}; ball.el = snode('g', {class: 'arc-bubble-piece', transform: `translate(${ball.x} ${ball.y})`}); ball.el.append(snode('circle', {r: 11, fill: colors[value], class: 'arc-bubble'})); layer.append(ball.el); return ball; };
       const load = () => {
         // Pick an exposed cluster, so the next color always has a reachable match.
         const exposed = balls.filter(ball => !balls.some(other => other.y > ball.y && Math.abs(other.x - ball.x) < 14));
@@ -302,27 +337,46 @@
       const swap = (a, b) => {
         if (pending || !neighbor(a, b)) return;
         selected = null; paint(); feedback();
-        const dx = (b % 4 - a % 4) * 100, dy = (Math.floor(b / 4) - Math.floor(a / 4)) * 100;
-        pieces[a].style.transform = `translate(${dx}%,${dy}%)`; pieces[b].style.transform = `translate(${-dx}%,${-dy}%)`;
+        const rect = pieces[a].getBoundingClientRect(), dx = (b % 4 - a % 4) * (rect.width + 3), dy = (Math.floor(b / 4) - Math.floor(a / 4)) * (rect.height + 3);
+        pieces[a].style.transform = `translate(${dx}px,${dy}px)`; pieces[b].style.transform = `translate(${-dx}px,${-dy}px)`;
         pending = {a, b, at: age + 180, phase: 'swap'};
       };
       function choose(i) { if (pending) return; if (selected === i) selected = null; else if (selected !== null && neighbor(selected, i)) return swap(selected, i); else selected = i; paint(); }
+      const drag = e => {
+        if (pointer?.id !== e.pointerId) return;
+        const dx = e.clientX - pointer.x, dy = e.clientY - pointer.y;
+        if (!pointer.axis && Math.hypot(dx, dy) < 5) return;
+        e.preventDefault(); pointer.axis ||= Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+        const offset = pointer.axis === 'x' ? dx : dy, span = pointer.axis === 'x' ? pointer.width : pointer.height;
+        const j = pointer.i + (pointer.axis === 'x' ? 1 : 4) * (offset < 0 ? -1 : 1), valid = j >= 0 && j < 16 && neighbor(pointer.i, j);
+        if (pointer.partner !== null && pointer.partner !== j) { pieces[pointer.partner].classList.remove('is-dragging'); pieces[pointer.partner].style.transform = ''; }
+        pointer.partner = valid ? j : null; pointer.offset = offset;
+        const amount = clamp(offset, -span * (valid ? 1 : .15), span * (valid ? 1 : .15));
+        const x = pointer.axis === 'x' ? amount : 0, y = pointer.axis === 'y' ? amount : 0;
+        pieces[pointer.i].classList.add('is-dragging'); pieces[pointer.i].style.transform = `translate(${x}px,${y}px)`;
+        if (valid) { pieces[j].classList.add('is-dragging'); pieces[j].style.transform = `translate(${-x}px,${-y}px)`; }
+      };
+      const endDrag = canceled => {
+        if (!pointer) return;
+        const owner = pointer; pointer = null; release(pieces[owner.i]);
+        pieces[owner.i].classList.remove('is-dragging'); if (owner.partner !== null) pieces[owner.partner].classList.remove('is-dragging');
+        ignoreClick = !!owner.axis;
+        if (!canceled && owner.partner !== null && Math.abs(owner.offset) >= 9) swap(owner.i, owner.partner);
+        else { pieces[owner.i].style.transform = ''; if (owner.partner !== null) pieces[owner.partner].style.transform = ''; }
+      };
       pieces.forEach((piece, i) => {
         grid.append(piece);
-        listen(piece, 'pointerdown', e => { if (pointer || pending || e.button !== 0) return; ignoreClick = false; pointer = {id: e.pointerId, x: e.clientX, y: e.clientY, i}; capture(piece, e); });
+        listen(piece, 'pointerdown', e => { if (pointer || pending || e.button !== 0) return; ignoreClick = false; const rect = piece.getBoundingClientRect(); pointer = {id: e.pointerId, x: e.clientX, y: e.clientY, i, width: rect.width + 3, height: rect.height + 3, axis: null, partner: null, offset: 0}; capture(piece, e); });
+        listen(piece, 'pointermove', drag);
         listen(piece, 'pointerup', e => {
           if (pointer?.id !== e.pointerId) return;
-          const dx = e.clientX - pointer.x, dy = e.clientY - pointer.y; pointer = null; release(piece);
-          if (Math.hypot(dx, dy) < 9) return;
-          ignoreClick = true;
-          const j = i + (Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : -1) : (dy > 0 ? 4 : -4));
-          if (j >= 0 && j < 16 && neighbor(i, j)) swap(i, j);
+          drag(e); endDrag(false);
         });
-        const cancel = e => { if (pointer?.id !== e.pointerId) return; pointer = null; release(piece); };
+        const cancel = e => { if (pointer?.id === e.pointerId) endDrag(true); };
         listen(piece, 'pointercancel', cancel); listen(piece, 'lostpointercapture', cancel);
-        listen(piece, 'keydown', e => { const step = {ArrowLeft: -1, ArrowRight: 1, ArrowUp: -4, ArrowDown: 4}[e.key]; if (!step) return; e.preventDefault(); const j = i + step; if (j >= 0 && j < 16 && neighbor(i, j)) swap(i, j); });
+        listen(piece, 'keydown', e => { const step = {ArrowLeft: -1, ArrowRight: 1, ArrowUp: -4, ArrowDown: 4}[e.key]; if (!step || pointer) return; e.preventDefault(); const j = i + step; if (j >= 0 && j < 16 && neighbor(i, j)) swap(i, j); });
       });
-      suspenders.push(() => { if (pointer) { const piece = pieces[pointer.i]; pointer = null; release(piece); } });
+      suspenders.push(() => endDrag(true));
       tickers.push(() => {
         if (!pending || age < pending.at) return;
         const {a, b, phase} = pending;
@@ -337,19 +391,20 @@
     } else if (type === 'pegs') {
       const field = scene('Aim from the top. Hit all three marked gold pegs over as many shots as needed.', true);
       const pegs = generatePegs(random);
-      const guide = snode('path', {class: 'arc-guide'}), barrel = snode('path', {d: 'M100 5V23', class: 'arc-barrel'}), projectile = snode('circle', {r: 4.5, fill: '#fffaf0', stroke: '#4c6054', 'stroke-width': 1.5, visibility: 'hidden'});
-      field.append(guide, barrel);
+      const guide = snode('path', {class: 'arc-guide'}), rebound = snode('path', {class: 'arc-guide arc-rebound'}), barrel = snode('path', {d: 'M100 5V23', class: 'arc-barrel'}), projectile = snode('circle', {r: 4.5, fill: '#fffaf0', stroke: '#4c6054', 'stroke-width': 1.5, visibility: 'hidden'});
+      field.append(guide, rebound, barrel);
       pegs.forEach(peg => { peg.el = snode('g', {class: `arc-peg${peg.marked ? ' is-marked' : ''}`, transform: `translate(${peg.x} ${peg.y})`}); peg.el.append(snode('circle', {r: peg.r})); if (peg.marked) peg.el.append(snode('path', {d: 'M-3 0H3M0-3V3', stroke: '#fffaf0', 'stroke-width': 2, 'stroke-linecap': 'round'})); field.append(peg.el); });
       field.append(projectile); const status = caption('0 / 3 GOLD PEGS');
       let ball = null, hits = 0, readyAt = 0, flight = 0;
-      const controls = aimControls(field, 1, value => {
-        ball = {x: 100 + Math.sin(radians(value)) * 18, y: 5 + Math.cos(radians(value)) * 18, vx: Math.sin(radians(value)) * 165, vy: Math.cos(radians(value)) * 165}; flight = 0;
-        attr(projectile, {cx: ball.x, cy: ball.y, visibility: 'visible'}); guide.setAttribute('visibility', 'hidden'); controls.update();
-      }, angle => {
+      const paintAim = angle => {
         barrel.setAttribute('transform', `rotate(${-angle} 100 5)`);
-        const vx = Math.sin(radians(angle)) * 165, vy = Math.cos(radians(angle)) * 165;
-        guide.setAttribute('d', Array.from({length: 15}, (_, i) => { const t = i * .025; return `${i ? 'L' : 'M'}${100 + Math.sin(radians(angle)) * 18 + vx * t} ${5 + Math.cos(radians(angle)) * 18 + vy * t + 90 * t * t}`; }).join(' '));
-      }, () => !ball && age >= readyAt);
+        const preview = pegPreview(angle, pegs), path = points => points.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ');
+        guide.setAttribute('d', path(preview.primary)); rebound.setAttribute('d', path(preview.rebound));
+      };
+      const controls = aimControls(field, 1, value => {
+        ball = pegLaunch(value); flight = 0;
+        attr(projectile, {cx: ball.x, cy: ball.y, visibility: 'visible'}); guide.setAttribute('visibility', 'hidden'); rebound.setAttribute('visibility', 'hidden'); controls.update();
+      }, paintAim, () => !ball && age >= readyAt);
       tickers.push(dt => {
         if (ball) {
           flight += dt;
@@ -357,7 +412,7 @@
           attr(projectile, {cx: ball.x, cy: ball.y});
           if (hits === 3) { finish(); return; }
           if (ball.y > 160 || flight > 5500) { ball = null; readyAt = age + 280; projectile.setAttribute('visibility', 'hidden'); }
-        } else if (age >= readyAt) guide.setAttribute('visibility', 'visible');
+        } else if (age >= readyAt) { if (readyAt) { paintAim(controls.angle); readyAt = 0; } guide.setAttribute('visibility', 'visible'); rebound.setAttribute('visibility', 'visible'); }
         controls.update();
       });
       hint.textContent = 'Tap or drag to aim, then press Shoot. Hit the three gold pegs. Arrow keys aim; Space shoots.';
@@ -366,7 +421,7 @@
       const defs = snode('defs'), clip = snode('clipPath', {id}), aperture = snode('rect', {x: 0, y: 20, width: 200, height: 130, rx: 16}); clip.append(aperture); defs.append(clip); field.append(defs);
       const viewport = snode('g', {'clip-path': `url(#${id})`}), sky = snode('g'), night = snode('rect', {width: 200, height: 150, fill: '#27394e'}); viewport.append(night, sky); field.append(viewport);
       for (let i = 0; i < 65; i++) sky.append(snode('circle', {cx: 15 + (i * 73 % 390), cy: 12 + (i * 113 % 295), r: i % 5 === 0 ? 1.4 : .7, fill: '#e7f1ef', opacity: .25 + (i % 4) * .15}));
-      const planets = [{x: 80, y: 76}, {x: 337, y: 86}, {x: 93, y: 252}, {x: 324, y: 245}];
+      const planets = generatePlanets(random);
       const offset = integer(random, 4), target = integer(random, 4);
       const planetGraphic = (kind, x, y, scale = 1) => {
         const group = snode('g', {transform: `translate(${x} ${y}) scale(${scale})`});
@@ -395,7 +450,6 @@
     } else if (type === 'board') {
       const field = scene('A winding board path. Choose a die to land exactly on the gift. Going past it returns to the start.');
       const {path, goal, values} = generateBoard(random), used = new Set();
-      field.append(snode('path', {d: path.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' '), fill: 'none', stroke: '#91a386', 'stroke-width': 31, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'}));
       path.forEach((p, i) => { field.append(snode('rect', {class: 'arc-board-space', x: p.x - 14, y: p.y - 14, width: 28, height: 28, rx: 5, fill: i === goal ? '#efd282' : i % 2 ? '#e7ead8' : '#f9f5df', stroke: '#798d72', 'stroke-width': 1})); if (i > 0 && i < goal) field.append(snode('circle', {cx: p.x, cy: p.y, r: 2, fill: '#93a48a'})); });
       const reward = snode('g', {class: 'arc-reward', transform: `translate(${path[goal].x} ${path[goal].y})`}); reward.append(snode('rect', {x: -8, y: -5, width: 16, height: 13, rx: 2, fill: '#c87369'}), snode('path', {d: 'M0-5V8M-9-5H9M0-6C-14-15-5-18 0-6C14-15 5-18 0-6', fill: 'none', stroke: '#fff0c0', 'stroke-width': 2})); field.append(reward);
       const pawn = snode('g', {class: 'arc-pawn'}); pawn.append(snode('ellipse', {cy: 8, rx: 8, ry: 3, fill: '#304e4933'}), snode('path', {d: 'M-7 6Q-8-2-3-4H3Q8-2 7 6Z', fill: '#4f8792', stroke: '#f5f4df', 'stroke-width': 1.5}), snode('circle', {cy: -7, r: 5, fill: '#4f8792', stroke: '#f5f4df', 'stroke-width': 1.5})); field.append(pawn);
@@ -412,7 +466,7 @@
       };
       dice.forEach((die, i) => { die.innerHTML = svgText(pipIndices[values[i]].map(index => `<circle cx="${20 + pips[index][0]}" cy="${20 + pips[index][1]}" r="2.7" fill="currentColor" stroke="none"/>`).join('')); });
       const paint = p => pawn.setAttribute('transform', `translate(${p.x} ${p.y})`);
-      const waypoint = index => path[index] || {x: path[goal].x - (index - goal) * 18, y: path[goal].y - (index - goal) * 9};
+      const waypoint = index => path[index] || {x: path[goal].x + (index - goal) * (path[goal].x - path[goal - 1].x) * .55, y: path[goal].y + (index - goal) * (path[goal].y - path[goal - 1].y) * .55};
       tickers.push(() => {
         if (!motion || age < motion.start) return;
         dice[motion.die].classList.remove('is-rolling');
@@ -432,11 +486,8 @@
       const field = scene('Mini golf. Drag back from the ball and release to putt. Keyboard: left/right aim, up/down power, Space to shoot.', true);
       const {start, hole, obstacles, turf} = generateGolf(random);
       let ball = {...start, vx: 0, vy: 0}, moving = false, drag = null, keyboardAngle = Math.atan2(hole.y - start.y, hole.x - start.x) * 180 / Math.PI, power = 34, courseHeight = 150;
-      const stripes = ['M13 102Q85 70 186 92M13 58Q115 31 185 53', 'M48 14Q74 80 43 136M116 14Q146 80 113 136', 'M12 118L167 12M38 140L192 36'];
       const course = snode('rect', {x: 3, y: 3, width: 194, height: 144, rx: 16, fill: ['#8fb78b', '#8eaf94', '#a2bc88'][turf], stroke: '#496f55', 'stroke-width': 5});
-      const grass = snode('path', {d: stripes[turf], fill: 'none', stroke: '#d1e0b5', opacity: '.3', 'stroke-width': 17});
-      const clipId = `arc-course-${++sceneSerial}`, defs = snode('defs'), clip = snode('clipPath', {id: clipId}), grassBounds = snode('rect', {x: 6, y: 6, width: 188, height: 138, rx: 13});
-      clip.append(grassBounds); defs.append(clip); const grassLayer = snode('g', {'clip-path': `url(#${clipId})`}); grassLayer.append(grass); field.append(defs, course, grassLayer);
+      field.append(course);
       obstacles.forEach(obstacle => {
         obstacle.el = snode('g'); field.append(obstacle.el);
         if (obstacle.kind === 'wall') obstacle.el.append(snode('rect', {class: 'arc-golf-wall', x: -obstacle.w / 2, y: -obstacle.h / 2, width: obstacle.w, height: obstacle.h, rx: 3, fill: '#d2c596', stroke: '#f4e9bd', 'stroke-width': 2}));
@@ -450,14 +501,15 @@
       fitScene(field, height => {
         const ratio = height / courseHeight;
         ball.y *= ratio; ball.vy *= ratio; hole.y *= ratio; courseHeight = height;
-        course.setAttribute('height', height - 6); grassBounds.setAttribute('height', height - 12); grass.setAttribute('transform', `scale(1 ${height / 150})`);
+        course.setAttribute('height', height - 6);
         obstacles.forEach(obstacle => { obstacle.y *= ratio; obstacle.el.setAttribute('transform', `translate(${obstacle.x} ${obstacle.y})`); });
         cup.setAttribute('cy', hole.y); flag.setAttribute('d', `M${hole.x} ${hole.y - 2}v-22l14 5-14 5`); paintBall();
       });
       const aim = (dx, dy) => {
         const size = Math.hypot(dx, dy), factor = size > 60 ? 60 / size : 1;
         dx *= factor; dy *= factor;
-        attr(guide, {visibility: 'visible', d: `M${ball.x - dx} ${ball.y - dy}L${ball.x} ${ball.y}L${ball.x + dx * .8} ${ball.y + dy * .8}`});
+        const heat = Math.min(1, size / 60);
+        attr(guide, {visibility: 'visible', d: `M${ball.x} ${ball.y}L${ball.x - dx} ${ball.y - dy}`, stroke: `rgb(255, ${Math.round(255 - heat * 180)}, ${Math.round(255 - heat * 175)})`});
         label.textContent = `${Math.round(Math.min(1, size / 60) * 100)}% POWER`; return {dx, dy};
       };
       const launch = (dx, dy) => { guide.setAttribute('visibility', 'hidden'); if (Math.hypot(dx, dy) < 3) { label.textContent = 'PULL BACK · RELEASE'; return; } ball.vx = dx * 4.5; ball.vy = dy * 4.5; moving = true; label.textContent = 'NICE AND EASY…'; feedback(); };

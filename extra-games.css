@@ -39,7 +39,7 @@
 .ex-level-row.is-matched .ex-level-mark { background: #66865d; }
 .ex-slider-thumb:focus-visible { outline: 2px solid #45634e; outline-offset: 2px; }
 .ex-catch-machine { --claw-height: clamp(34px, 25cqw, 50px); position: relative; width: 100%; flex: 1; border-top: 4px solid #3d574333; border-bottom: 2px solid #3d574329; min-height: 0; }
-.ex-claw { top: 0; transform: translateX(-50%); width: var(--claw-height); height: var(--claw-height); background: transparent; }
+.ex-claw { position: absolute; top: 0; transform: translateX(-50%); width: var(--claw-height); height: var(--claw-height); background: transparent; pointer-events: none; }
 .ex-catch-travel { position: absolute; inset: 0 calc(var(--claw-height) * .4); }
 .ex-claw-rod{position:absolute;top:0;width:3px;height:8px;translate:-50% 0;background:linear-gradient(90deg,#657d6b,#f6f4d8 50%,#778c76);border-radius:2px;pointer-events:none}
 .ex-catch-prize { position: absolute; bottom: -1px; transform: translateX(-50%); font-size: clamp(23px, 17cqw, 33px); color: #b8737b; line-height: 1; transition: transform .2s, opacity .2s; }
@@ -95,10 +95,11 @@
 @media (prefers-reduced-motion: reduce) { .mg-extra * { transition: none !important; } }
 
 /* Wide finger pads; generous alignment windows. */
-.ex-level-track{margin:0 21px}.ex-level-slider{width:clamp(32px,21cqw,40px)}
-.ex-level-slider::after{content:'';position:absolute;inset:-6px;border-radius:50%}
-.ex-level-mark{width:16%;margin-left:-8%;top:21%;bottom:21%;background:#6b8b5935;border:1px solid #6b8b5970;border-radius:7px}
-.ex-level-mark::after{content:'';position:absolute;width:2px;left:calc(50% - 1px);top:3px;bottom:3px;background:#55784e80;border-radius:2px}
+.ex-level-track{margin:0 14px}
+.ex-level-track::before{left:-14px;right:-14px;top:0;height:100%;border-radius:7px;background:#68808124}
+.ex-level-slider{width:clamp(18px,13cqw,27px);height:100%;aspect-ratio:auto;border-radius:5px}
+.ex-level-slider::after{content:'';position:absolute;inset:0 -7px;border-radius:5px}
+.ex-level-mark{width:18%;margin-left:-9%;top:0;bottom:0;background:#6b8b5950;border:1px solid #6b8b5970;border-radius:5px}
 .ex-level-row.is-matched .ex-level-slider{background:#edf5df;box-shadow:0 0 0 2px #68865d70}
 .ex-memory-code{font-size:clamp(20px,16cqw,32px);letter-spacing:.08em;padding-left:.08em;font-weight:550;min-height:25px}
 .ex-memory-start{flex:1;width:100%;margin-top:3px}.mg-memory .ex-key{font-size:clamp(18px,14cqw,28px)!important}
