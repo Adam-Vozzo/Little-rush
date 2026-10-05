@@ -119,13 +119,15 @@
     const path = route.map(cell => ({x: 22 + cell % 6 * 31, y: 28 + Math.floor(cell / 6) * 31}));
     return {values, goal, path};
   }
+  const telescopeSky = {width: 520, height: 400, edge: 65, planetGap: 110};
   function generatePlanets(random = Math.random) {
+    const {width, height, edge, planetGap} = telescopeSky, inset = edge + 10;
     const planets = [], add = p => {
-      if (distance(p, {x: 210, y: 160}) < 60 || planets.some(other => distance(p, other) < 78)) return;
+      if (distance(p, {x: width / 2, y: height / 2}) < 60 || planets.some(other => distance(p, other) < planetGap)) return;
       planets.push(p);
     };
-    for (let attempt = 0; attempt < 200 && planets.length < 4; attempt++) add({x: 75 + random() * 270, y: 75 + random() * 170});
-    for (const y of [75, 160, 245]) for (const x of [75, 165, 255, 345]) if (planets.length < 4) add({x, y});
+    for (let attempt = 0; attempt < 200 && planets.length < 4; attempt++) add({x: inset + random() * (width - inset * 2), y: inset + random() * (height - inset * 2)});
+    for (const y of [inset, height / 2, height - inset]) for (const x of [inset, inset + (width - inset * 2) / 3, width - inset - (width - inset * 2) / 3, width - inset]) if (planets.length < 4) add({x, y});
     return planets;
   }
   const obstacleDistance = (p, obstacle) => obstacle.kind === 'wall'
@@ -420,7 +422,8 @@
       const field = scene('Telescope. Drag the sky or use arrow keys to center the target planet in the crosshair.', true), id = `arc-scope-${++sceneSerial}`;
       const defs = snode('defs'), clip = snode('clipPath', {id}), aperture = snode('rect', {x: 0, y: 20, width: 200, height: 130, rx: 16}); clip.append(aperture); defs.append(clip); field.append(defs);
       const viewport = snode('g', {'clip-path': `url(#${id})`}), sky = snode('g'), night = snode('rect', {width: 200, height: 150, fill: '#27394e'}); viewport.append(night, sky); field.append(viewport);
-      for (let i = 0; i < 65; i++) sky.append(snode('circle', {cx: 15 + (i * 73 % 390), cy: 12 + (i * 113 % 295), r: i % 5 === 0 ? 1.4 : .7, fill: '#e7f1ef', opacity: .25 + (i % 4) * .15}));
+      const {width, height, edge} = telescopeSky;
+      for (let i = 0; i < 100; i++) sky.append(snode('circle', {cx: 10 + (i * 73 % (width - 20)), cy: 10 + (i * 113 % (height - 20)), r: i % 5 === 0 ? 1.4 : .7, fill: '#e7f1ef', opacity: .25 + (i % 4) * .15}));
       const planets = generatePlanets(random);
       const offset = integer(random, 4), target = integer(random, 4);
       const planetGraphic = (kind, x, y, scale = 1) => {
@@ -436,15 +439,15 @@
       const reference = planetGraphic((target + offset) % 4, 30, 20, 1.2); reference.setAttribute('class', 'arc-target-planet'); field.append(reference);
       const cross = snode('circle', {cx: 100, cy: 77, r: 18, fill: 'none', stroke: '#dceadc', 'stroke-width': 1, 'stroke-dasharray': '3 4'}), lock = snode('circle', {cx: 100, cy: 77, r: 22, fill: 'none', stroke: '#b9dea7', 'stroke-width': 3, 'stroke-dasharray': '0 139', transform: 'rotate(-90 100 77)'});
       const reticle = snode('g'); reticle.append(cross, lock, snode('path', {d: 'M100 50V55M100 99V104M73 77H78M122 77H127', stroke: '#e4ead8', 'stroke-width': 1})); field.append(reticle);
-      let camera = {x: 210, y: 160}, pointer = null, locked = 0, centerY = 85;
+      let camera = {x: width / 2, y: height / 2}, pointer = null, locked = 0, centerY = 85;
       const paint = () => { sky.setAttribute('transform', `translate(${100 - camera.x} ${centerY - camera.y})`); reticle.setAttribute('transform', `translate(0 ${centerY - 77})`); field.setAttribute('aria-description', `View ${Math.round(camera.x)}, ${Math.round(camera.y)}. Target ${['coral', 'blue', 'ringed gold', 'green'][(target + offset) % 4]} planet.`); };
       fitScene(field, height => { aperture.setAttribute('height', height - 20); night.setAttribute('height', height); centerY = (height + 20) / 2; paint(); });
       listen(field, 'pointerdown', e => { if (pointer || e.button !== 0) return; e.preventDefault(); pointer = {id: e.pointerId, at: point(field, e), camera: {...camera}}; capture(field, e); });
-      listen(field, 'pointermove', e => { if (pointer?.id !== e.pointerId) return; e.preventDefault(); const p = point(field, e); camera = {x: clamp(pointer.camera.x - p.x + pointer.at.x, 65, 355), y: clamp(pointer.camera.y - p.y + pointer.at.y, 65, 255)}; paint(); });
+      listen(field, 'pointermove', e => { if (pointer?.id !== e.pointerId) return; e.preventDefault(); const p = point(field, e); camera = {x: clamp(pointer.camera.x - p.x + pointer.at.x, edge, width - edge), y: clamp(pointer.camera.y - p.y + pointer.at.y, edge, height - edge)}; paint(); });
       const cancel = () => { pointer = null; release(field); };
       for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) listen(field, event, e => { if (pointer?.id === e.pointerId) cancel(); });
       suspenders.push(cancel);
-      listen(field, 'keydown', e => { const d = {ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -12], ArrowDown: [0, 12]}[e.key]; if (!d) return; e.preventDefault(); camera.x = clamp(camera.x + d[0], 65, 355); camera.y = clamp(camera.y + d[1], 65, 255); paint(); });
+      listen(field, 'keydown', e => { const d = {ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -12], ArrowDown: [0, 12]}[e.key]; if (!d) return; e.preventDefault(); camera.x = clamp(camera.x + d[0], edge, width - edge); camera.y = clamp(camera.y + d[1], edge, height - edge); paint(); });
       tickers.push(dt => { const found = distance(camera, planets[target]) < 14; locked = found ? locked + dt : 0; lock.setAttribute('stroke-dasharray', `${Math.min(1, locked / 400) * 139} 139`); if (locked >= 400) { hint.textContent = 'Target planet found'; finish(); } });
       paint(); hint.textContent = 'Find the pictured planet, then hold it in the center of the telescope.';
     } else if (type === 'board') {

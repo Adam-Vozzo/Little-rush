@@ -209,7 +209,7 @@ test('planet positions vary continuously, stay reachable and separated, and star
   const layouts=new Set();
   for(let seed=1;seed<=400;seed++) {
     const planets=rules.generatePlanets(seeded(seed*65537)); assert.equal(planets.length,4); layouts.add(JSON.stringify(planets));
-    planets.forEach((p,i)=>{assert.ok(p.x>=65&&p.x<=355&&p.y>=65&&p.y<=255);assert.ok(Math.hypot(p.x-210,p.y-160)>=60);planets.slice(i+1).forEach(q=>assert.ok(Math.hypot(p.x-q.x,p.y-q.y)>=78));});
+    planets.forEach((p,i)=>{assert.ok(p.x>=65&&p.x<=455&&p.y>=65&&p.y<=335);assert.ok(Math.hypot(p.x-260,p.y-200)>=60);planets.slice(i+1).forEach(q=>assert.ok(Math.hypot(p.x-q.x,p.y-q.y)>=110));});
   }
   assert.equal(layouts.size,400); for(const value of [0,.5,.999])assert.equal(rules.generatePlanets(()=>value).length,4);
 });
@@ -330,8 +330,8 @@ test('telescope drag pans freely and needs a centered target for 400ms', () => {
   const g = game('telescope'), field = g.one('.arc-scene'); field.rect = {left: 0, top: 0, width: 200, height: 150};
   assert.equal(g.all('.arc-caption').length,0); assert.equal(field.textContent,''); assert.match(g.one('.arc-target-planet').getAttribute('transform'),/scale\(1\.2\)/);
   field.dispatch('pointerdown', {pointerId: 7, clientX: 100, clientY: 77});
-  field.dispatch('pointermove', {pointerId: 8, clientX: 230, clientY: 161}); g.advance(500); assert.equal(g.completions, 0);
-  field.dispatch('pointermove', {pointerId: 7, clientX: 230, clientY: 161}); field.dispatch('pointerup', {pointerId: 7});
+  field.dispatch('pointermove', {pointerId: 8, clientX: 285, clientY: 202}); g.advance(500); assert.equal(g.completions, 0);
+  field.dispatch('pointermove', {pointerId: 7, clientX: 285, clientY: 202}); field.dispatch('pointerup', {pointerId: 7});
   g.advance(380); assert.equal(g.completions, 0); g.advance(30); assert.equal(g.completions, 1); assert.equal(field.pointerId, null);
 });
 test('board consumes four fixed dice, resets the same choices on overshoot and permits exact landing', () => {
