@@ -31,23 +31,24 @@
 
     void main() {
       vec2 uv = v_uv;
-      vec2 focus = mix(vec2(.32, .24), u_pointer, .67);
-      float angle = dot(uv, vec2(.83, -.58));
-      float phase = angle * 1.35 + u_seed * .19;
-      phase += (u_pointer.x - .5) * .21 + (u_pointer.y - .5) * .12;
-      phase += u_time * .017;
-      vec3 rainbow = .5 + .5 * cos(6.283185 * (phase + vec3(0.0, .333, .667)));
-      float bands = pow(.5 + .5 * sin(angle * 21.0 + phase * 3.0), 10.0);
-      float secondary = pow(.5 + .5 * sin(angle * 41.0 - phase * 2.0), 20.0);
-      float broad = exp(-dot((uv - focus) * vec2(1.2, .85), (uv - focus) * vec2(1.2, .85)) * 5.5);
-      float etched = sin((uv.x * .7 + uv.y) * 420.0 + u_seed) * .018;
-      float dust = grain(floor(uv * u_pixels));
-      float fleck = pow(grain(floor(uv * 123.0 + u_seed * 17.0)), 44.0);
-      vec3 pearl = mix(u_tint * .83 + .1, rainbow * .64 + .34, .73);
-      pearl += bands * .19 + secondary * .07 + broad * .13;
-      pearl += (dust - .5) * .09 + etched + fleck * (.08 + broad * .24);
-      pearl -= (1.0 - broad) * .055;
-      gl_FragColor = vec4(clamp(pearl, 0.0, 1.0), .70);
+      vec2 focus = mix(vec2(.32, .24), u_pointer, .75);
+      vec2 pixel = min(uv, 1.0 - uv) * u_pixels;
+      float edge = min(pixel.x, pixel.y);
+      float rim = 1.0 - smoothstep(2.0, 6.0, edge);
+      float keyline = (1.0 - smoothstep(.25, 1.1, abs(edge - 9.0))) * .24;
+      float angle = dot(uv, normalize(vec2(.9, -.65) + (focus - .5) * .3));
+      float phase = angle * 1.4 + u_seed * .12 + dot(focus, vec2(.38, .24)) + sin(u_time * .32) * .055;
+      vec3 spectrum = .54 + .30 * cos(6.283185 * (phase + vec3(.0, .29, .58)));
+      float specular = pow(max(0.0, 1.0 - abs(angle - dot(focus, vec2(.9, -.65))) * 1.3), 14.0);
+      float brushed = .5 + .5 * sin((uv.x + uv.y * .6) * 540.0);
+      float corner = exp(-length((uv - vec2(.88, .9)) * vec2(1.0, .9)) * 8.0);
+      float engraving = pow(.5 + .5 * sin(length(uv - vec2(.88, .9)) * 190.0), 9.0) * corner;
+      float fleck = pow(grain(floor(uv * 170.0 + u_seed)), 55.0) * specular;
+      vec3 metal = mix(spectrum, u_tint * .7 + .28, .3);
+      metal += specular * .65 + brushed * .065;
+      // Foil is concentrated on the bevel and engraved corner; the reading surface stays matte.
+      float alpha = rim * .94 + keyline + engraving * .085 + specular * .055 + fleck * .15;
+      gl_FragColor = vec4(clamp(metal, 0.0, 1.0), clamp(alpha, 0.0, 1.0));
     }
   `;
 
@@ -138,7 +139,7 @@
     const state = runtime = {
       entries: new Map(), renderer: null, failed: false, disposed: false,
       raf: 0, queued: false, dirty: true, lastDraw: null, seconds: 0,
-      reduced: !!motion?.matches, paused: false, pointer: null,
+      reduced: !!motion?.matches, paused: false, pointer: null, touches: new Map(),
       mutation: null, resize: null, removers: [], reason: '',
     };
     root.dataset.foilRenderer = 'css';
@@ -155,6 +156,8 @@
       state.resize?.unobserve(tile);
       entry.canvas.remove(); entry.canvas.width = entry.canvas.height = 1;
       tile.removeAttribute('data-foil-ready'); state.entries.delete(tile);
+      state.touches.delete(tile);
+      tile.style.removeProperty('--foil-rx'); tile.style.removeProperty('--foil-ry'); tile.classList.remove('foil-touch');
     };
     const fallBack = reason => {
       if (state.disposed) return;
@@ -185,8 +188,9 @@
         for (const entry of state.entries.values()) {
           let targetX = .32, targetY = .24;
           if (!state.reduced && state.pointer) {
-            targetX = clamp((state.pointer[0] - entry.rect.left) / entry.rect.width, -.5, 1.5);
-            targetY = clamp((state.pointer[1] - entry.rect.top) / entry.rect.height, -.5, 1.5);
+            const local = state.touches.get(entry.tile) || state.pointer;
+            const x = (local[0] - entry.rect.left) / entry.rect.width, y = (local[1] - entry.rect.top) / entry.rect.height;
+            if (state.touches.has(entry.tile) || x >= 0 && x <= 1 && y >= 0 && y <= 1) { targetX = clamp(x, 0, 1); targetY = clamp(y, 0, 1); }
           }
           if (state.reduced) { entry.focus[0] = .32; entry.focus[1] = .24; }
           else { entry.focus[0] += (targetX - entry.focus[0]) * .24; entry.focus[1] += (targetY - entry.focus[1]) * .24; }
@@ -205,7 +209,7 @@
       state.paused = paused();
       if (state.paused) stopFrame();
       if (state.failed) return;
-      const candidates = [...document.querySelectorAll('.tile:not(.empty):not(.completed)')]
+      const candidates = [...document.querySelectorAll('.tile:not(.empty):not(.completed):not(.game-preview)')]
         .filter(tile => tile.clientWidth > 0 && tile.clientHeight > 0 && tile.getClientRects().length);
       const keep = new Set(candidates);
       for (const [tile, entry] of state.entries) {
@@ -261,14 +265,39 @@
     listen(window, 'resize', requestSync, { passive: true });
     listen(window, 'scroll', requestSync, { passive: true, capture: true });
     listen(document, 'animationend', event => { if (event.target.matches?.('.tile')) requestSync(); });
+    const tilt = (tile, event) => {
+      if (state.reduced || state.paused || !tile || tile.classList.contains('is-solved')) return;
+      const rect = tile.getBoundingClientRect();
+      const x = clamp((event.clientX - rect.left) / rect.width, 0, 1) - .5;
+      const y = clamp((event.clientY - rect.top) / rect.height, 0, 1) - .5;
+      tile.style.setProperty('--foil-rx', `${(-y * 4).toFixed(2)}deg`);
+      tile.style.setProperty('--foil-ry', `${(x * 4).toFixed(2)}deg`);
+    };
+    const releaseTilts = pointerId => {
+      for (const [tile, point] of state.touches) {
+        if (pointerId !== undefined && point[2] !== pointerId) continue;
+        tile.style.removeProperty('--foil-rx'); tile.style.removeProperty('--foil-ry'); tile.classList.remove('foil-touch'); state.touches.delete(tile);
+      }
+    };
+    listen(document, 'pointerdown', event => {
+      const tile = event.target.closest?.('#game-board .tile:not(.empty)');
+      if (!tile || state.reduced || state.paused) return;
+      state.pointer = [event.clientX, event.clientY]; state.touches.set(tile, [event.clientX, event.clientY, event.pointerId]);
+      tile.classList.add('foil-touch'); tilt(tile, event);
+    }, { passive: true });
     listen(document, 'pointermove', event => {
       if (state.reduced) return;
       state.pointer = [event.clientX, event.clientY];
+      for (const [tile, point] of state.touches) if (point[2] === event.pointerId) { state.touches.set(tile, [event.clientX, event.clientY, event.pointerId]); tilt(tile, event); }
       if (!state.paused) requestFrame();
     }, { passive: true });
     listen(document, 'pointerleave', () => { state.pointer = null; });
+    listen(document, 'pointerup', event => releaseTilts(event.pointerId), { passive: true });
+    listen(document, 'pointercancel', event => releaseTilts(event.pointerId), { passive: true });
+    listen(window, 'blur', () => releaseTilts());
     const motionChanged = event => {
       state.reduced = !!event.matches; state.dirty = true; state.lastDraw = null;
+      releaseTilts();
       stopFrame(); requestSync();
     };
     if (motion?.addEventListener) { motion.addEventListener('change', motionChanged); state.removers.push(() => motion.removeEventListener('change', motionChanged)); }
@@ -277,6 +306,7 @@
       if (state.disposed) return;
       state.disposed = true; stopFrame(); state.mutation?.disconnect(); state.resize?.disconnect();
       state.removers.forEach(remove => remove());
+      releaseTilts();
       for (const [tile, entry] of state.entries) removeEntry(tile, entry);
       state.renderer?.release(); state.renderer = null;
     };

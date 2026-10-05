@@ -131,15 +131,16 @@
         hint.textContent = 'Ready! Tap to hatch';
       });
     } else if (type === 'break') {
+      const requiredHits = demo ? 8 : integer(5, 11);
       let hits = 0;
       let hitUntil = 0;
-      const geode = button('mg-geode', 'Tap the geode eight times to reveal its crystals', () => {
+      const geode = button('mg-geode', `Tap the geode ${requiredHits} times to reveal its crystals`, () => {
         hits++;
         feedback();
         geode.setAttribute('data-hits', String(hits));
-        geode.setAttribute('aria-label', hits === 8 ? 'Geode opened. Crystals discovered.' : `Open the geode: ${8 - hits} taps left`);
-        cracks.forEach((crack, index) => { crack.style.opacity = hits > index ? '1' : '0'; });
-        const opening = Math.max(0, hits - 3);
+        geode.setAttribute('aria-label', hits === requiredHits ? 'Geode opened. Crystals discovered.' : `Open the geode: ${requiredHits - hits} taps left`);
+        cracks.forEach((crack, index) => { crack.style.opacity = (hits / requiredHits * 8) > index ? '1' : '0'; });
+        const opening = Math.max(0, hits / requiredHits * 8 - 3);
         leftShell.style.transform = `translate(${-opening * 1.7}px, ${opening * .5}px) rotate(${-opening * 2}deg)`;
         rightShell.style.transform = `translate(${opening * 1.7}px, ${opening * .5}px) rotate(${opening * 2}deg)`;
         crystals.style.opacity = hits >= 3 ? '1' : '0';
@@ -147,8 +148,8 @@
         hitUntil = age + 110;
         geode.style.transform = `rotate(${hits % 2 ? -2 : 2}deg) scale(.96)`;
         dots.update(hits);
-        hint.textContent = hits === 8 ? 'A little wonder inside' : `${8 - hits} taps to reveal`;
-        if (hits === 8) {
+        hint.textContent = hits === requiredHits ? 'A little wonder inside' : `${requiredHits - hits} taps to reveal`;
+        if (hits === requiredHits) {
           geode.style.transform = '';
           geode.classList.add('is-open');
           finish({ kind: 'geode' });
@@ -172,7 +173,7 @@
       const leftShell = geode.querySelector('.mg-geode-left');
       const rightShell = geode.querySelector('.mg-geode-right');
       const crystals = geode.querySelector('.mg-geode-crystals');
-      const dots = progressDots(8);
+      const dots = progressDots(requiredHits);
       body.append(geode, dots.element);
       hint.textContent = 'Tap to discover crystals';
       tickers.push(() => { if (hitUntil && age >= hitUntil) { geode.style.transform = ''; hitUntil = 0; } });
@@ -251,18 +252,20 @@
       body.append(grid);
       hint.textContent = 'Tap 1 → 2 → 3 → 4';
     } else if (type === 'switch') {
-      let activated = 0;
+      const initiallyOn = new Set(shuffle([0, 1, 2, 3, 4, 5]).slice(0, demo ? 2 : integer(1, 4)));
+      let activated = initiallyOn.size;
       const switches = node('div', 'mg-switches');
-      for (let i = 0; i < 3; i++) {
-        const toggle = button('mg-toggle', `Turn on switch ${i + 1}`, () => {
-          if (toggle.getAttribute('aria-pressed') === 'true') return;
-          activated++;
-          toggle.setAttribute('aria-pressed', 'true');
-          toggle.classList.add('is-on');
+      for (let i = 0; i < 6; i++) {
+        const toggle = button('mg-toggle', 'Switch ' + (i + 1), () => {
+          const on = toggle.getAttribute('aria-pressed') !== 'true';
+          activated += on ? 1 : -1;
+          toggle.setAttribute('aria-pressed', String(on));
+          toggle.classList.toggle('is-on', on);
           feedback();
-          if (activated === 3) finish();
+          if (activated === 6) finish();
         });
-        toggle.setAttribute('aria-pressed', 'false');
+        toggle.setAttribute('aria-pressed', String(initiallyOn.has(i)));
+        toggle.classList.toggle('is-on', initiallyOn.has(i));
         toggle.innerHTML = '<span class="mg-toggle-track"><span class="mg-toggle-knob"></span></span>';
         switches.append(toggle);
       }
@@ -273,14 +276,14 @@
       const board = node('div', 'mg-simon-board');
       const colors = ['rose', 'gold', 'sky', 'leaf'];
       const colorNames = ['Pink', 'Yellow', 'Blue', 'Green'];
-      let replayStart = 0;
+      let replayStart = 0, started = false;
       let inputIndex = 0;
       let watching = true;
       let tapped = -1;
       let tapUntil = 0;
       const pads = colors.map((color, index) => {
         const pad = button(`mg-simon-pad mg-pad-${color}`, `${colorNames[index]} pattern button`, () => {
-          if (watching) return;
+          if (!started || watching) return;
           tapped = index;
           tapUntil = age + 160;
           if (index !== pattern[inputIndex]) {
@@ -302,14 +305,22 @@
         return pad;
       });
       const dots = progressDots(3);
+      const start = button('mg-simon-start', 'Start pattern', () => {
+        if (started) return;
+        started = true; watching = true; replayStart = age;
+        start.disabled = true; start.textContent = '•••';
+        hint.textContent = 'Watch the pattern'; feedback();
+      });
+      start.textContent = 'Start'; board.append(start);
       body.append(board, dots.element);
-      hint.textContent = demo ? 'Watch, then repeat' : 'Watch the pattern';
+      hint.textContent = 'Press Start when ready';
       if (demo) pads[2].classList.add('is-lit');
       tickers.push(() => {
+        if (!started) return;
         const elapsed = age - replayStart;
         const wasWatching = watching;
         watching = elapsed < 2100;
-        if (wasWatching && !watching) hint.textContent = 'Your turn · repeat';
+        if (wasWatching && !watching) { hint.textContent = 'Your turn · repeat'; start.textContent = 'Go'; }
         const step = Math.floor((elapsed - 220) / 600);
         const flash = elapsed >= 220 && step < 3 && (elapsed - 220) % 600 < 380 ? pattern[step] : -1;
         pads.forEach((pad, index) => pad.classList.toggle('is-lit', watching ? flash === index : age < tapUntil && tapped === index));

@@ -2,11 +2,18 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const catalog = window.LittleRushGames.catalog;
-  const lifetime = window.LittleRushEngine.TILE_LIFETIME_MS;
+  const difficulties = { calm: { spawn: 3000, expiry: 30000 }, normal: { spawn: 2500, expiry: 25000 }, extreme: { spawn: 1500, expiry: 15000 } };
+  let difficulty = readSaved('little-rush-difficulty', 'normal');
+  if (!Object.hasOwn(difficulties, difficulty)) difficulty = 'normal';
+  let lifetime = difficulties[difficulty].expiry;
+  const previews = [];
+  const savedGameplay = readJSON('little-rush-gameplay-v1', {});
+  let timeBasedPoints = savedGameplay?.timeBasedPoints === true;
+  let pointsPreference = savedGameplay?.pointsPreference === 'late' ? 'late' : 'fast';
   const board = $('game-board');
   const dialog = $('game-dialog');
   const habitat = new window.LittleRushButterfly.Habitat(board.parentElement);
-  const cells = [], views = new Map(), flashes = new Map();
+  const cells = [], views = new Map();
   let lastFrame = performance.now(), modalKind = '', atHome = true;
   let lastShownTime = '', lastShownScore = -1, hatchIntroduced = false;
   let soundEnabled = readSaved('little-rush-sound', 'off') === 'on', audioContext;
@@ -75,7 +82,7 @@
   function feedback(kind) { tone(kind === 'error' ? 180 : 540, 0, kind === 'error' ? .08 : .035, .025); }
   function announce(text) { $('announcer').textContent = text; }
   const engine = new window.LittleRushEngine({
-    types: catalog.map(game => game.id), initialType: 'press',
+    types: catalog.map(game => game.id), firstSpawnDelayMs: 650,
     isTypeAvailable(type, state) {
       if (disabledGames.has(type)) return false;
       if (type === 'press') return !hatchIntroduced;
@@ -91,8 +98,11 @@
     onComplete(tile, state) {
       if (tile.type === 'press' && habitat.hatch(tile.slot, state.elapsedMs) && !disabledGames.has('feed')) engine.enqueueType('feed');
       if (tile.type === 'feed') habitat.celebrate(state.elapsedMs);
-      flashes.set(tile.slot, performance.now() + (tile.type === 'break' ? 700 : 420));
-      tone(660, 0, .11); tone(880, .07, .16, .025); announce(`${state.score} cleared.`);
+      if (tile.points) {
+        const reward = document.createElement('span'); reward.className = 'tile-points'; reward.textContent = `+${tile.points}`;
+        cells[tile.slot].append(reward);
+      }
+      tone(660, 0, .11); tone(880, .07, .16, .025); announce(timeBasedPoints ? `${tile.points} points. Total ${state.points}.` : `${state.score} cleared.`);
     },
     onEnd(tile, state) { updateRecords(state); tone(330, 0, .18, .03); tone(247, .13, .25, .025); showResult(tile, state); }
   });
@@ -115,13 +125,13 @@
     cell.innerHTML = `<header class="tile-header"><span class="tile-title">${game.title}</span>${timerMarkup()}</header><div class="microgame"></div>`;
     const timer = cell.querySelector('.tile-timer'), fill = cell.querySelector('.timer-fill');
     const api = window.LittleRushGames.mount(cell.querySelector('.microgame'), game.id, {
-      butterfly: habitat, onComplete: () => engine.complete(tile.id, performance.now()), onFeedback: feedback
+      butterfly: habitat, onComplete: () => engine.complete(tile.id, performance.now(), game.id === 'break' ? 880 : ['roll', 'connect', 'match'].includes(game.id) ? 720 : 480), onFeedback: feedback
     });
     views.set(tile.slot, { api, id: tile.id, type: game.id, timer, fill, lastSeconds: -1 });
   }
   function showHome() {
     if (!atHome) { if (engine.status === 'running') engine.pause(performance.now()); updateRecords(engine.snapshot(performance.now())); }
-    closeDialog(); destroyViews(); habitat.reset(); hatchIntroduced = false; flashes.clear(); atHome = true;
+    closeDialog(); destroyViews(); habitat.reset(); hatchIntroduced = false; atHome = true;
     document.body.classList.remove('is-running'); cells.forEach(emptyCell);
     $('home-screen').hidden = false; $('play-screen').hidden = true; $('pause-button').disabled = true;
     renderRecords(); syncStart();
@@ -129,12 +139,17 @@
   function startRun() {
     if (!canStart()) return;
     if (!atHome) updateRecords(engine.snapshot(performance.now()));
-    closeDialog(); initAudio(); destroyViews(); habitat.reset(); hatchIntroduced = false; flashes.clear(); atHome = false;
+    closeDialog(); initAudio(); destroyViews(); habitat.reset(); hatchIntroduced = false; atHome = false;
     bestAtStart = records.allTime.timeMs; scoreAtStart = records.allTime.score;
     cells.forEach(emptyCell); document.body.classList.add('is-running');
     $('home-screen').hidden = true; $('play-screen').hidden = false; $('pause-button').disabled = false;
     engine.types = catalog.filter(game => !disabledGames.has(game.id)).map(game => game.id);
-    engine.initialType = disabledGames.has('press') ? null : 'press';
+    engine.initialType = null;
+    engine.spawnIntervalMs = difficulties[difficulty].spawn;
+    engine.tileLifetimeMs = lifetime = difficulties[difficulty].expiry;
+    engine.scoringMode = timeBasedPoints ? pointsPreference : 'off';
+    $('hud-score').setAttribute('aria-label', timeBasedPoints ? 'Points scored' : 'Challenges cleared');
+    $('hud-score').classList.toggle('shows-points', timeBasedPoints);
     lastShownTime = ''; lastShownScore = -1; lastFrame = performance.now();
     engine.start(lastFrame); render(engine.snapshot(lastFrame), lastFrame, 0);
     $('pause-button').focus({ preventScroll: true });
@@ -144,18 +159,19 @@
     habitat.update(state.elapsedMs, state.status === 'running');
     const formatted = timeText(state.elapsedMs, true);
     if (formatted !== lastShownTime) { $('run-time').innerHTML = formatted; lastShownTime = formatted; }
-    if (state.score !== lastShownScore) { $('score').textContent = String(state.score); $('score').setAttribute('aria-label', `${state.score} cleared`); lastShownScore = state.score; }
+    const shownScore = timeBasedPoints ? state.points : state.score;
+    if (shownScore !== lastShownScore) { $('score').textContent = String(shownScore); $('score').setAttribute('aria-label', timeBasedPoints ? `${state.points} points` : `${state.score} cleared`); lastShownScore = shownScore; }
     cells.forEach((cell, slot) => {
       const tile = state.tiles[slot]; let view = views.get(slot);
-      if (!tile && view?.type === 'break' && (flashes.get(slot) || 0) > now) { cell.classList.remove('urgent'); cell.classList.add('geode-cleared'); cell.setAttribute('aria-label', 'Geode opened. Challenge cleared.'); view.timer.hidden = true; return; }
       if (view && (!tile || view.id !== tile.id)) { view.api.destroy(); views.delete(slot); view = null; }
-      if (!tile) {
-        if ((flashes.get(slot) || 0) > now) {
-          if (cell.dataset.view !== 'completed') { cell.className = 'tile completed'; cell.dataset.view = 'completed'; cell.removeAttribute('data-game'); cell.removeAttribute('data-tile-id'); cell.setAttribute('aria-label', 'Challenge cleared'); cell.innerHTML = '<div class="complete-flash"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m7 16 6 6L26 9"/></svg></div>'; }
-        } else if (cell.dataset.view !== 'empty') emptyCell(cell, slot);
+      if (!tile) { if (cell.dataset.view !== 'empty') emptyCell(cell, slot); return; }
+      if (!view) { mountTile(cell, catalog.find(game => game.id === tile.type), tile); view = views.get(slot); }
+      if (tile.completedAt !== undefined) {
+        cell.classList.remove('urgent'); cell.classList.add('is-solved');
+        cell.classList.toggle('is-clearing', tile.releaseInMs <= 170);
+        cell.setAttribute('aria-label', 'Challenge cleared'); view.timer.hidden = true;
         return;
       }
-      if (!view) { mountTile(cell, catalog.find(game => game.id === tile.type), tile); view = views.get(slot); }
       view.fill.setAttribute('d', piePath(tile.remainingMs / lifetime));
       const seconds = Math.ceil(tile.remainingMs / 1000);
       if (seconds !== view.lastSeconds) { view.timer.setAttribute('aria-label', `${seconds} seconds remaining`); view.lastSeconds = seconds; }
@@ -171,10 +187,12 @@
     requestAnimationFrame(frame);
   }
   function openDialog(kind, content) {
+    previews.splice(0).forEach(api => api.destroy());
+    dialog.classList.toggle('tweaks-dialog', kind === 'tweaks');
     modalKind = kind; habitat.update(engine.snapshot(performance.now()).elapsedMs, false); board.setAttribute('inert', '');
     $('dialog-content').innerHTML = content; if (!dialog.open) dialog.showModal();
   }
-  function closeDialog() { if (dialog.open) dialog.close(); modalKind = ''; board.removeAttribute('inert'); }
+  function closeDialog() { previews.splice(0).forEach(api => api.destroy()); if (dialog.open) dialog.close(); modalKind = ''; board.removeAttribute('inert'); }
   function resumeRun() { closeDialog(); initAudio(); lastFrame = performance.now(); engine.resume(lastFrame); render(engine.snapshot(lastFrame), lastFrame, 0); }
   function showPauseMenu() {
     openDialog('pause', `<div class="dialog-eyebrow">A LITTLE BREATHER</div><h2 id="dialog-title">Paused.</h2><p>The rush can wait.</p><button class="primary-button" data-action="resume">Keep playing</button><div class="pause-options"><button class="menu-option" data-action="sound" aria-pressed="${soundEnabled}">Sound ${soundEnabled ? 'on' : 'off'}</button><button class="menu-option" data-action="help">How to play</button></div><button class="secondary-button" data-action="restart">Start again</button><button class="quiet-button" data-action="home">Title screen</button>`);
@@ -184,22 +202,35 @@
     updateRecords(engine.snapshot(performance.now())); showPauseMenu();
   }
   function showHelp() {
-    openDialog('help', '<div class="dialog-eyebrow">HOW TO PLAY</div><h2 id="dialog-title">Keep up.</h2><ul class="help-steps"><li>A new tile every 2.5 seconds.</li><li>Clear each within 25 seconds. Its filled circle counts down.</li><li>One empty circle ends the run.</li><li>Switch between tiles in any order.</li><li>Wait for the chrysalis, then tap. Drag nectar to the butterfly.</li></ul><div class="category-key"><span><i style="background:var(--butter)"></i>Numbers</span><span><i style="background:var(--lavender)"></i>Memory</span><span><i style="background:var(--blue)"></i>Spatial</span><span><i style="background:var(--sage)"></i>Precision</span><span><i style="background:var(--peach)"></i>Nature & time</span></div><button class="primary-button" data-action="back-pause">Back to pause</button>');
+    openDialog('help', '<div class="dialog-eyebrow">HOW TO PLAY</div><h2 id="dialog-title">Keep up.</h2><ul class="help-steps"><li>A new tile every 2.5 seconds.</li><li>Clear each within 25 seconds. Its filled circle counts down.</li><li>One empty circle ends the run.</li><li>Switch between tiles in any order.</li><li>Wait for the chrysalis, then tap. Drag nectar to the butterfly.</li></ul><div class="category-key"><span><i style="background:var(--butter)"></i>Numbers</span><span><i style="background:var(--lavender)"></i>Memory</span><span><i style="background:var(--blue)"></i>Spatial</span><span><i style="background:var(--sage)"></i>Precision</span><span><i style="background:var(--peach)"></i>Nature & time</span></div><button class="primary-button" data-action="back-pause">Back to pause</button>'.replace('2.5 seconds', (engine.spawnIntervalMs / 1000) + ' seconds').replace('25 seconds', (lifetime / 1000) + ' seconds'));
   }
   function showResult(tile, state) {
     const game = catalog.find(item => item.id === tile.type), record = state.elapsedMs > bestAtStart || state.score > scoreAtStart;
-    openDialog('result', `<div class="dialog-eyebrow">${record ? 'A NEW PERSONAL BEST' : 'ONE LITTLE TILE TOO LATE'}</div><h2 id="dialog-title">That was a rush.</h2><p>${game.title.toLowerCase()} ran out of time.</p><div class="result-stats"><div class="result-stat"><strong>${timeText(state.elapsedMs)}</strong><span>TIME</span></div><div class="result-stat"><strong>${state.score}</strong><span>CLEARED</span></div></div><button class="primary-button" data-action="restart">One more round</button><button class="quiet-button" data-action="home">Title screen</button>`);
+    openDialog('result', `<div class="dialog-eyebrow">${record ? 'A NEW PERSONAL BEST' : 'ONE LITTLE TILE TOO LATE'}</div><h2 id="dialog-title">That was a rush.</h2><p>${game.title.toLowerCase()} ran out of time.</p><div class="result-stats"><div class="result-stat"><strong>${timeText(state.elapsedMs)}</strong><span>TIME</span></div><div class="result-stat"><strong>${timeBasedPoints ? state.points : state.score}</strong><span>${timeBasedPoints ? 'POINTS' : 'CLEARED'}</span></div></div><button class="primary-button" data-action="restart">One more round</button><button class="quiet-button" data-action="home">Title screen</button>`);
     announce(`Run over. ${timeText(state.elapsedMs)} survived. ${state.score} games cleared.`);
   }
   function saveTweaks() { save('little-rush-disabled-games-v1', JSON.stringify([...disabledGames])); syncStart(); }
+  function saveGameplay() { save('little-rush-gameplay-v1', JSON.stringify({ timeBasedPoints, pointsPreference })); }
   function showTweaks(tab = tweaksTab) {
     tweaksTab = tab;
-    const toggles = catalog.map(game => `<label class="game-toggle"><span><i style="background:var(--${game.color})" aria-hidden="true"></i>${game.title}</span><input type="checkbox" data-game-toggle="${game.id}" aria-label="Allow ${game.title}" ${disabledGames.has(game.id) ? '' : 'checked'} ${game.id === 'feed' && disabledGames.has('press') ? 'disabled' : ''}></label>`).join('');
-    const tabs = `<div class="tweaks-tabs" role="tablist" aria-label="Tweaks sections"><button id="games-tab" role="tab" data-action="games-tab" aria-controls="games-panel" aria-selected="${tab === 'games'}" tabindex="${tab === 'games' ? 0 : -1}">Micro-games</button><button id="styles-tab" role="tab" data-action="styles-tab" aria-controls="styles-panel" aria-selected="${tab === 'styles'}" tabindex="${tab === 'styles' ? 0 : -1}">Styles</button></div>`;
+    const toggles = catalog.map(game => `<article class="game-option"><div class="tile ${game.color} game-preview" aria-hidden="true" inert><header class="tile-header"><span class="tile-title">${game.title}</span></header><div class="microgame" data-preview="${game.id}"></div></div><label class="game-toggle"><span>${game.title}</span><input type="checkbox" role="switch" data-game-toggle="${game.id}" aria-label="Allow ${game.title}" ${disabledGames.has(game.id) ? '' : 'checked'} ${game.id === 'feed' && disabledGames.has('press') ? 'disabled' : ''}></label></article>`).join('');
+    const tabs = `<div class="tweaks-tabs" role="tablist" aria-label="Tweaks sections"><button id="games-tab" role="tab" data-action="games-tab" aria-controls="games-panel" aria-selected="${tab === 'games'}" tabindex="${tab === 'games' ? 0 : -1}">Micro-games</button><button id="styles-tab" role="tab" data-action="styles-tab" aria-controls="styles-panel" aria-selected="${tab === 'styles'}" tabindex="${tab === 'styles' ? 0 : -1}">Styles</button><button id="gameplay-tab" role="tab" data-action="gameplay-tab" aria-controls="gameplay-panel" aria-selected="${tab === 'gameplay'}" tabindex="${tab === 'gameplay' ? 0 : -1}">Gameplay</button></div>`;
     const gamesPanel = `<section id="games-panel" role="tabpanel" aria-labelledby="games-tab" ${tab === 'games' ? '' : 'hidden'}><p class="tweaks-note">Choose what appears in your next run.</p><div class="tweak-presets"><button data-action="all-on">All on</button><button data-action="all-off">All off</button></div><div class="game-toggles">${toggles}</div><p class="tweak-status">${canStart() ? 'Feed needs Wait & Hatch. Choices are saved.' : 'Enable at least one repeatable game to play.'}</p></section>`;
     const stylesPanel = `<section id="styles-panel" role="tabpanel" aria-labelledby="styles-tab" ${tab === 'styles' ? '' : 'hidden'}><p class="tweaks-note">A new feel for the whole game.</p><div class="theme-options" role="group" aria-label="Game style">${['flat', 'holofoil'].map(name => `<button class="theme-option ${name === selectedTheme ? 'is-selected' : ''}" data-action="theme-${name}" aria-pressed="${name === selectedTheme}"><span class="theme-preview theme-preview-${name}" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="theme-description"><strong>${name === 'flat' ? 'Flat' : 'Holofoil'}</strong><small>${name === 'flat' ? 'Soft colours. Simple little squares.' : 'Prismatic foil. A little shimmer.'}</small></span><span class="theme-check" aria-hidden="true">${name === selectedTheme ? '✓' : ''}</span></button>`).join('')}</div><p class="tweak-status">Style changes apply immediately and are saved.</p></section>`;
-    openDialog('tweaks', `<div class="dialog-eyebrow">MAKE IT YOURS</div><h2 id="dialog-title">Tweaks</h2>${tabs}${gamesPanel}${stylesPanel}<button class="primary-button" data-action="close">Done</button>`);
+    const gameplayPanel = `<section id="gameplay-panel" role="tabpanel" aria-labelledby="gameplay-tab" ${tab === 'gameplay' ? '' : 'hidden'}><p class="tweaks-note">Choose what a clear is worth.</p><div class="gameplay-setting"><label class="game-toggle points-toggle"><span>Time-based points</span><input type="checkbox" role="switch" id="time-based-points" aria-label="Time-based points" ${timeBasedPoints ? 'checked' : ''}></label><p>Replace the cleared counter with points earned from each tile. Up to 100 points per clear.</p><fieldset class="points-options" ${timeBasedPoints ? '' : 'disabled'}><legend>Reward timing</legend><label><input type="radio" name="points-preference" value="fast" ${pointsPreference === 'fast' ? 'checked' : ''}><span><strong>Faster clears</strong><small>More time left means more points.</small></span></label><label><input type="radio" name="points-preference" value="late" ${pointsPreference === 'late' ? 'checked' : ''}><span><strong>Closer to expiry</strong><small>Less time left means more points. Clear before the circle empties.</small></span></label></fieldset></div><p class="tweak-status">Applies to your next run. Choices are saved.</p></section>`;
+    openDialog('tweaks', `<div class="dialog-eyebrow">MAKE IT YOURS</div><h2 id="dialog-title">Tweaks</h2>${tabs}${gamesPanel}${stylesPanel}${gameplayPanel}<button class="primary-button" data-action="close">Done</button>`);
+    if (tab === 'games') $('dialog-content').querySelectorAll('[data-preview]').forEach(container => previews.push(window.LittleRushGames.mount(container, container.dataset.preview, { demo: true })));
   }
+  function syncDifficulty() {
+    document.querySelectorAll('[data-difficulty]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.difficulty === difficulty)));
+    const mode = difficulties[difficulty];
+    $('difficulty-detail').textContent = `A game every ${mode.spawn / 1000}s · ${mode.expiry / 1000}s to clear`;
+  }
+  $('difficulty-options').addEventListener('click', event => {
+    const name = event.target.closest('[data-difficulty]')?.dataset.difficulty;
+    if (!Object.hasOwn(difficulties, name)) return;
+    difficulty = name; save('little-rush-difficulty', name); syncDifficulty();
+  });
   $('start-button').addEventListener('click', startRun); $('pause-button').addEventListener('click', pauseRun); $('tweaks-button').addEventListener('click', () => {
     showTweaks(); $('dialog-content').querySelector('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true });
   });
@@ -211,7 +242,7 @@
     if (action === 'close') closeDialog();
     if (action === 'help') showHelp();
     if (action === 'back-pause') showPauseMenu();
-    if (action === 'games-tab' || action === 'styles-tab') { showTweaks(action === 'games-tab' ? 'games' : 'styles'); $('dialog-content').querySelector(`[data-action="${action}"]`)?.focus({ preventScroll: true }); }
+    if (['games-tab', 'styles-tab', 'gameplay-tab'].includes(action)) { showTweaks(action.replace('-tab', '')); $('dialog-content').querySelector(`[data-action="${action}"]`)?.focus({ preventScroll: true }); }
     if (action === 'theme-flat' || action === 'theme-holofoil') {
       selectedTheme = action === 'theme-holofoil' ? 'holofoil' : 'flat'; save('little-rush-theme-v1', selectedTheme);
       window.LittleRushTheme?.setTheme(selectedTheme); showTweaks('styles');
@@ -221,6 +252,13 @@
     if (action === 'all-on' || action === 'all-off') { disabledGames = new Set(action === 'all-on' ? [] : catalog.map(game => game.id)); saveTweaks(); showTweaks(); }
   });
   $('dialog-content').addEventListener('change', event => {
+    if (modalKind === 'tweaks' && event.target.id === 'time-based-points') {
+      timeBasedPoints = event.target.checked; saveGameplay();
+      $('dialog-content').querySelector('.points-options').disabled = !timeBasedPoints; return;
+    }
+    if (modalKind === 'tweaks' && event.target.name === 'points-preference' && ['fast','late'].includes(event.target.value)) {
+      pointsPreference = event.target.value; saveGameplay(); return;
+    }
     const id = event.target.dataset.gameToggle;
     if (!catalog.some(game => game.id === id) || modalKind !== 'tweaks') return;
     if (id === 'feed' && disabledGames.has('press')) return;
@@ -235,7 +273,8 @@
   $('dialog-content').addEventListener('keydown', event => {
     if (event.target.getAttribute('role') !== 'tab' || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    const tab = event.key === 'Home' ? 'games' : event.key === 'End' ? 'styles' : tweaksTab === 'games' ? 'styles' : 'games';
+    const tabs = ['games', 'styles', 'gameplay'];
+    const tab = event.key === 'Home' ? 'games' : event.key === 'End' ? 'gameplay' : tabs[(tabs.indexOf(tweaksTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3];
     showTweaks(tab); $('dialog-content').querySelector(`[data-action="${tab}-tab"]`)?.focus({ preventScroll: true });
   });
   dialog.addEventListener('cancel', event => { event.preventDefault(); if (modalKind === 'pause') resumeRun(); else if (modalKind === 'help') showPauseMenu(); else if (modalKind === 'tweaks') closeDialog(); });
@@ -244,5 +283,5 @@
   window.addEventListener('blur', () => { if (!dialog.open) pauseRun(); });
   window.addEventListener('pagehide', () => { if (!atHome) { if (engine.status === 'running') engine.pause(performance.now()); updateRecords(engine.snapshot(performance.now())); } });
   window.LittleRushTheme?.setTheme(selectedTheme);
-  showHome(); requestAnimationFrame(frame);
+  syncDifficulty(); showHome(); requestAnimationFrame(frame);
 })();

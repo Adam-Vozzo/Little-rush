@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f5f4ec">
-<meta name="description" content="Twenty-one tiny games. Eight little squares. Find your little rush.">
+<meta name="description" content="Twenty-two tiny games. Eight little squares. Find your little rush.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>little rush</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -26,6 +26,7 @@
         <section class="record-card"><h2>All-time best</h2><div class="record-values"><div><strong id="alltime-time">00:00</strong><span>time</span></div><div><strong id="alltime-score">0</strong><span>cleared</span></div></div></section>
         <section class="record-card today-card"><h2>Today's best <span class="today-dot" aria-hidden="true"></span></h2><div class="record-values"><div><strong id="today-time">00:00</strong><span>time</span></div><div><strong id="today-score">0</strong><span>cleared</span></div></div></section>
       </div>
+      <div class="difficulty-picker"><span class="difficulty-label">Difficulty</span><div id="difficulty-options" role="group" aria-label="Difficulty"><button data-difficulty="calm" aria-pressed="false">Calm</button><button data-difficulty="normal" aria-pressed="true">Normal</button><button data-difficulty="extreme" aria-pressed="false">Extreme</button></div><p id="difficulty-detail">A game every 2.5s · 25s to clear</p></div>
       <button class="primary-button" id="start-button">Let's play <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
       <button class="quiet-button tweaks-button" id="tweaks-button">Tweaks</button>
       <p class="home-note" id="home-note">Personal records, saved on this device.</p>
@@ -33,7 +34,7 @@
   </section>
   <section class="play-screen" id="play-screen" aria-label="Little Rush game" hidden>
     <header class="game-hud">
-      <div class="hud-score" aria-label="Challenges cleared"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"/></svg><span id="score">0</span></div>
+      <div class="hud-score" id="hud-score" aria-label="Challenges cleared"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"/></svg><span id="score">0</span></div>
       <div class="hud-time" id="run-time" role="timer" aria-label="Run time">00:00<span>.0</span></div>
       <button class="icon-button" id="pause-button" aria-label="Pause game" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
     </header>
