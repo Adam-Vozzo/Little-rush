@@ -351,14 +351,15 @@
         cells.push(cell); maze.append(cell);
       });
       const overlay = node('div', 'ex-maze-overlay');
-      overlay.innerHTML = '<svg viewBox="0 0 5 5" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path class="ex-maze-ink" stroke="#b96869" stroke-width=".075" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/><ellipse class="ex-maze-dot" rx=".34" ry=".34" fill="#b96869" stroke="#fff8ed" stroke-width=".07"/></svg>';
-      const mazeInk = overlay.querySelector('.ex-maze-ink'), mazeDot = overlay.querySelector('.ex-maze-dot');
+      overlay.innerHTML = '<svg viewBox="0 0 5 5" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path class="ex-maze-ink" stroke="#b96869" stroke-width=".075" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/><ellipse class="ex-maze-halo" rx=".7" ry=".7" stroke="#a84959" stroke-width=".06"/><ellipse class="ex-maze-dot" rx=".34" ry=".34" fill="#b96869" stroke="#fff8ed" stroke-width=".07"/></svg>';
+      const mazeInk = overlay.querySelector('.ex-maze-ink'), mazeDot = overlay.querySelector('.ex-maze-dot'), mazeHalo = overlay.querySelector('.ex-maze-halo');
       maze.append(overlay);
       if (window.ResizeObserver) {
         const observer = new window.ResizeObserver(() => {
           const w = overlay.clientWidth, h = overlay.clientHeight;
           if (!w || !h) return;
           mazeDot.setAttribute('rx', .34 * Math.min(w, h) / w); mazeDot.setAttribute('ry', .34 * Math.min(w, h) / h);
+          mazeHalo.setAttribute('rx', .7 * Math.min(w, h) / w); mazeHalo.setAttribute('ry', .7 * Math.min(w, h) / h);
         });
         observer.observe(overlay); removers.push(() => observer.disconnect());
       }
@@ -367,6 +368,7 @@
         dotPoint = [...point];
         if (Math.hypot(point[0] - previous[0], point[1] - previous[1]) > .008) trail.push([...point]);
         mazeDot.setAttribute('cx', String(dotPoint[0])); mazeDot.setAttribute('cy', String(dotPoint[1]));
+        mazeHalo.setAttribute('cx', String(dotPoint[0])); mazeHalo.setAttribute('cy', String(dotPoint[1]));
         mazeInk.setAttribute('d', trail.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(3)} ${y.toFixed(3)}`).join(' '));
       };
       paintDot(dotPoint);

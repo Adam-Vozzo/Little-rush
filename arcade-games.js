@@ -84,7 +84,7 @@
   function generatePegs(random = Math.random) {
     const pegs = [], count = 7 + integer(random, 4);
     const add = (x, y) => {
-      const marked = pegs.length < 3, r = marked ? 8 : 5 + integer(random, 2), candidate = {x, y, r, marked, hit: false};
+      const marked = pegs.length < 3, r = marked ? 12 : 8 + integer(random, 2), candidate = {x, y, r, marked, hit: false};
       if (pegs.some(peg => distance(peg, candidate) < peg.r + r + 12)) return false;
       pegs.push(candidate); return true;
     };
@@ -97,13 +97,13 @@
     return pegs;
   }
   function generateBoard(random = Math.random) {
-    const values = shuffle([1, 2, 3, 4, 5, 6], random).slice(0, 4), options = [];
+    const values = shuffle([1, 2, ...shuffle([3, 4, 5, 6], random).slice(0, 2)], random), options = [];
     for (let mask = 1; mask < 16; mask++) {
       const chosen = values.filter((_, i) => mask & 1 << i), total = chosen.reduce((sum, value) => sum + value, 0);
-      if (chosen.length >= 2 && chosen.length <= 3 && total >= 6 && total <= 12) options.push(total);
+      if (chosen.length <= 3 && total >= 2 && total <= 7) options.push(total);
     }
     const goal = options[integer(random, options.length)];
-    const neighbors = cell => [cell % 6 ? cell - 1 : -1, cell % 6 < 5 ? cell + 1 : -1, cell - 6, cell + 6].filter(next => next >= 0 && next < 24);
+    const neighbors = cell => [cell % 5 ? cell - 1 : -1, cell % 5 < 4 ? cell + 1 : -1, cell - 5, cell + 5].filter(next => next >= 0 && next < 15);
     let route = [], visits = 0;
     const walk = cell => {
       if (++visits > 3000) return false;
@@ -115,8 +115,8 @@
       }
       route.pop(); return false;
     };
-    if (!walk(integer(random, 24))) route = [0, 1, 2, 3, 4, 5, 11, 17, 16, 15, 14, 13, 12].slice(0, goal + 1);
-    const path = route.map(cell => ({x: 22 + cell % 6 * 31, y: 28 + Math.floor(cell / 6) * 31}));
+    if (!walk(integer(random, 15))) route = [0, 1, 2, 3, 4, 9, 14, 13, 12].slice(0, goal + 1);
+    const path = route.map(cell => ({x: 22 + cell % 5 * 39, y: 36 + Math.floor(cell / 5) * 39}));
     return {values, goal, path};
   }
   const telescopeSky = {width: 520, height: 400, edge: 65, planetGap: 110};
@@ -396,7 +396,7 @@
       const guide = snode('path', {class: 'arc-guide'}), rebound = snode('path', {class: 'arc-guide arc-rebound'}), barrel = snode('path', {d: 'M100 5V23', class: 'arc-barrel'}), projectile = snode('circle', {r: 4.5, fill: '#fffaf0', stroke: '#4c6054', 'stroke-width': 1.5, visibility: 'hidden'});
       field.append(guide, rebound, barrel);
       pegs.forEach(peg => { peg.el = snode('g', {class: `arc-peg${peg.marked ? ' is-marked' : ''}`, transform: `translate(${peg.x} ${peg.y})`}); peg.el.append(snode('circle', {r: peg.r})); if (peg.marked) peg.el.append(snode('path', {d: 'M-3 0H3M0-3V3', stroke: '#fffaf0', 'stroke-width': 2, 'stroke-linecap': 'round'})); field.append(peg.el); });
-      field.append(projectile); const status = caption('0 / 3 GOLD PEGS');
+      field.append(projectile);
       let ball = null, hits = 0, readyAt = 0, flight = 0;
       const paintAim = angle => {
         barrel.setAttribute('transform', `rotate(${-angle} 100 5)`);
@@ -410,7 +410,7 @@
       tickers.push(dt => {
         if (ball) {
           flight += dt;
-          advanceBall(ball, dt / 1000, {gravity: 180, bounce: .9, obstacles: pegs, onHit: peg => { peg.hit = true; peg.el.classList.add('is-hit'); feedback(); if (peg.marked) { hits++; status.textContent = `${hits} / 3 GOLD PEGS`; hint.textContent = `${hits} of three marked pegs hit`; } }});
+          advanceBall(ball, dt / 1000, {gravity: 180, bounce: .9, obstacles: pegs, onHit: peg => { peg.hit = true; peg.el.classList.add('is-hit'); feedback(); if (peg.marked) { hits++; hint.textContent = `${hits} of three marked pegs hit`; } }});
           attr(projectile, {cx: ball.x, cy: ball.y});
           if (hits === 3) { finish(); return; }
           if (ball.y > 160 || flight > 5500) { ball = null; readyAt = age + 280; projectile.setAttribute('visibility', 'hidden'); }
@@ -453,7 +453,7 @@
     } else if (type === 'board') {
       const field = scene('A winding board path. Choose a die to land exactly on the gift. Going past it returns to the start.');
       const {path, goal, values} = generateBoard(random), used = new Set();
-      path.forEach((p, i) => { field.append(snode('rect', {class: 'arc-board-space', x: p.x - 14, y: p.y - 14, width: 28, height: 28, rx: 5, fill: i === goal ? '#efd282' : i % 2 ? '#e7ead8' : '#f9f5df', stroke: '#798d72', 'stroke-width': 1})); if (i > 0 && i < goal) field.append(snode('circle', {cx: p.x, cy: p.y, r: 2, fill: '#93a48a'})); });
+      path.forEach((p, i) => { field.append(snode('rect', {class: 'arc-board-space', x: p.x - 18, y: p.y - 18, width: 36, height: 36, rx: 6, fill: i === goal ? '#efd282' : i % 2 ? '#e7ead8' : '#f9f5df', stroke: '#798d72', 'stroke-width': 1})); if (i > 0 && i < goal) field.append(snode('circle', {cx: p.x, cy: p.y, r: 2, fill: '#93a48a'})); });
       const reward = snode('g', {class: 'arc-reward', transform: `translate(${path[goal].x} ${path[goal].y})`}); reward.append(snode('rect', {x: -8, y: -5, width: 16, height: 13, rx: 2, fill: '#c87369'}), snode('path', {d: 'M0-5V8M-9-5H9M0-6C-14-15-5-18 0-6C14-15 5-18 0-6', fill: 'none', stroke: '#fff0c0', 'stroke-width': 2})); field.append(reward);
       const pawn = snode('g', {class: 'arc-pawn'}); pawn.append(snode('ellipse', {cy: 8, rx: 8, ry: 3, fill: '#304e4933'}), snode('path', {d: 'M-7 6Q-8-2-3-4H3Q8-2 7 6Z', fill: '#4f8792', stroke: '#f5f4df', 'stroke-width': 1.5}), snode('circle', {cy: -7, r: 5, fill: '#4f8792', stroke: '#f5f4df', 'stroke-width': 1.5})); field.append(pawn);
       const status = snode('text', {x: 99, y: 76, 'text-anchor': 'middle', class: 'arc-board-status'}, ''); field.append(status);

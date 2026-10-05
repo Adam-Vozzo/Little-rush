@@ -1,0 +1,3 @@
+// Vendored browser bundle: npm run vendor. Three.js is MIT licensed.
+import {WebGLRenderer, Scene, OrthographicCamera, Group, Mesh, Shape, Path, ExtrudeGeometry, SphereGeometry, MeshPhysicalMaterial, ShaderMaterial, CanvasTexture, EquirectangularReflectionMapping, SRGBColorSpace, HemisphereLight, DirectionalLight, ACESFilmicToneMapping} from 'three';
+window.LittleRushThree = {WebGLRenderer, Scene, OrthographicCamera, Group, Mesh, Shape, Path, ExtrudeGeometry, SphereGeometry, MeshPhysicalMaterial, ShaderMaterial, CanvasTexture, EquirectangularReflectionMapping, SRGBColorSpace, HemisphereLight, DirectionalLight, ACESFilmicToneMapping};

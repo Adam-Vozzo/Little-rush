@@ -100,6 +100,11 @@
 .ex-level-slider{width:clamp(18px,13cqw,27px);height:100%;aspect-ratio:auto;border-radius:5px}
 .ex-level-slider::before{content:'';position:absolute;left:50%;top:50%;width:12px;height:18px;transform:translate(-50%,-50%);background:radial-gradient(circle,#788575 1.2px,transparent 1.4px) 0 0/6px 6px;pointer-events:none}
 .ex-level-slider::after{content:'';position:absolute;inset:0 -7px;border-radius:5px}
+.ex-level-slider.is-dragging::after{inset:-5px -12px;border:2px solid #426d6aaa;box-shadow:0 0 0 2px #fffaf0a6;border-radius:12px;pointer-events:none}
+.ex-level-slider.is-dragging{z-index:3}
+.ex-maze-halo{opacity:0;transition:opacity .12s;pointer-events:none}
+.ex-maze-grid.is-dragging .ex-maze-halo{opacity:.85}
+.ex-maze-overlay,.ex-maze-overlay svg{overflow:visible}
 .ex-level-mark{width:18%;margin-left:-9%;top:0;bottom:0;background:#6b8b5950;border:1px solid #6b8b5970;border-radius:5px}
 .ex-level-row.is-matched .ex-level-slider{background:#edf5df;box-shadow:0 0 0 2px #68865d70}
 .ex-memory-code{font-size:clamp(20px,16cqw,32px);letter-spacing:.08em;padding-left:.08em;font-weight:550;min-height:25px}

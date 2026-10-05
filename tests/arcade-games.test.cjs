@@ -191,18 +191,18 @@ test('random board lengths have an exact solution using the four fixed dice once
   for(let seed=1;seed<=500;seed++) {
     const {values,goal,path}=rules.generateBoard(seeded(seed)); lengths.add(goal);
     assert.equal(values.length,4); assert.equal(new Set(values).size,4); assert.equal(path.length,goal+1);
-    assert.ok(goal>=6&&goal<=12);
+    assert.ok(path.length>=3&&path.length<=8);
     layouts.add(path.map(p=>`${p.x},${p.y}`).join(';'));
     path.forEach((p,i)=>path.slice(i+1).forEach((q,j)=>{
       const gap=Math.abs(p.x-q.x)+Math.abs(p.y-q.y);
-      assert.ok(Math.abs(p.x-q.x)>=31||Math.abs(p.y-q.y)>=31, 'Steps must not overlap');
-      if(j===0) assert.equal(gap,31,'Consecutive steps stay next to one another');
-      else assert.ok(gap>31,'Non-consecutive steps cannot create an ambiguous branch');
+      assert.ok(Math.abs(p.x-q.x)>=39||Math.abs(p.y-q.y)>=31, 'Steps must not overlap');
+      if(j===0) assert.equal(gap,39,'Consecutive steps stay next to one another');
+      else assert.ok(gap>39,'Non-consecutive steps cannot create an ambiguous branch');
     }));
     assert.ok(Array.from({length:15},(_,i)=>i+1).some(mask=>values.reduce((sum,n,i)=>sum+(mask & 1<<i ? n : 0),0)===goal));
   }
-  assert.equal(lengths.size,7);
-  assert.ok(layouts.size>400);
+  assert.equal(lengths.size,6);
+  assert.ok(layouts.size>300);
 });
 
 test('planet positions vary continuously, stay reachable and separated, and start away from the crosshair', () => {
@@ -319,7 +319,7 @@ test('peg shots rebound and remember marked hits between shots', () => {
     if (g.completions) break;
     setAngle(g, angle); g.label('Shoot ball').click(); g.advance(5900);
   }
-  assert.equal(g.completions, 1); assert.equal(g.one('.arc-caption').textContent, '3 / 3 GOLD PEGS');
+  assert.equal(g.completions, 1); assert.equal(g.all('.arc-caption').length, 0);
 });
 test('substepped physics rebounds off pegs and detects a hole without tunneling', () => {
   const ball = {x: 100, y: 10, vx: 0, vy: 400}, peg = {x: 100, y: 40, r: 8}; let hits = 0;

@@ -18,7 +18,9 @@
   let lastFrame = performance.now(), modalKind = '', atHome = true;
   let lastShownTime = '', lastShownScore = -1, hatchIntroduced = false;
   let soundEnabled = readSaved('little-rush-sound', 'off') === 'on', audioContext;
-  let selectedTheme = readSaved('little-rush-theme-v1', 'flat') === 'holofoil' ? 'holofoil' : 'flat';
+  const styles = {flat: ['Flat', 'Soft colours. Simple little squares.'], holofoil: ['Holofoil', 'Prismatic foil. A little shimmer.'], aero: ['Aero 3D', 'Blue glass, green leaves, and sunlight.']};
+  let selectedTheme = readSaved('little-rush-theme-v1', 'flat');
+  if (!Object.hasOwn(styles, selectedTheme)) selectedTheme = 'flat';
   let tweaksTab = 'games';
   const positive = value => Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
   const savedRecords = readJSON('little-rush-records-v1', {});
@@ -64,7 +66,7 @@
     renderRecords();
   }
   function canStart() { return catalog.some(game => game.id !== 'press' && !(difficulty === 'zen' && game.id === 'feed') && !disabledGames.has(game.id) && (game.id !== 'feed' || !disabledGames.has('press'))); }
-  const unavailableMessage = () => difficulty === 'zen' ? 'Enable a game besides Hatch and Feed in Tweaks to fill the board.' : 'Enable a repeatable micro-game in Tweaks to play.';
+  const unavailableMessage = () => difficulty === 'zen' ? 'Enable a game besides Hatch and Feed in Tweaks to play.' : 'Enable a repeatable micro-game in Tweaks to play.';
   function syncStart() {
     const unavailable = unavailableMessage();
     $('start-button').disabled = !canStart();
@@ -229,10 +231,10 @@
   function saveGameplay() { save('little-rush-gameplay-v1', JSON.stringify({ timeBasedPoints, pointsPreference })); }
   function showTweaks(tab = tweaksTab) {
     tweaksTab = tab;
-    const toggles = catalog.map(game => `<article class="game-option"><div class="tile ${game.color} game-preview" aria-label="Practice ${game.title}"><header class="tile-header"><span class="tile-title">${game.title}</span></header><div class="microgame" data-preview="${game.id}"></div></div><label class="game-toggle"><span>${game.title}</span><input type="checkbox" role="switch" data-game-toggle="${game.id}" aria-label="Allow ${game.title}" ${disabledGames.has(game.id) ? '' : 'checked'} ${game.id === 'feed' && disabledGames.has('press') ? 'disabled' : ''}></label></article>`).join('');
+    const toggles = catalog.map(game => `<article class="game-option"><div class="tile ${game.color} game-preview" data-game="${game.id}" aria-label="Practice ${game.title}"><header class="tile-header"><span class="tile-title">${game.title}</span></header><div class="microgame" data-preview="${game.id}"></div></div><label class="game-toggle"><span>${game.title}</span><input type="checkbox" role="switch" data-game-toggle="${game.id}" aria-label="Allow ${game.title}" ${disabledGames.has(game.id) ? '' : 'checked'} ${game.id === 'feed' && disabledGames.has('press') ? 'disabled' : ''}></label></article>`).join('');
     const tabs = `<div class="tweaks-tabs" role="tablist" aria-label="Tweaks sections"><button id="games-tab" role="tab" data-action="games-tab" aria-controls="games-panel" aria-selected="${tab === 'games'}" tabindex="${tab === 'games' ? 0 : -1}">Micro-games</button><button id="styles-tab" role="tab" data-action="styles-tab" aria-controls="styles-panel" aria-selected="${tab === 'styles'}" tabindex="${tab === 'styles' ? 0 : -1}">Styles</button><button id="gameplay-tab" role="tab" data-action="gameplay-tab" aria-controls="gameplay-panel" aria-selected="${tab === 'gameplay'}" tabindex="${tab === 'gameplay' ? 0 : -1}">Gameplay</button></div>`;
     const gamesPanel = `<section id="games-panel" role="tabpanel" aria-labelledby="games-tab" ${tab === 'games' ? '' : 'hidden'}><p class="tweaks-note">Try any game here. Completed games refresh automatically.</p><div class="tweak-presets"><button data-action="all-on">All on</button><button data-action="all-off">All off</button></div><div class="game-toggles">${toggles}</div><p class="tweak-status">${canStart() ? 'Feed needs Wait & Hatch. Choices are saved.' : unavailableMessage()}</p></section>`;
-    const stylesPanel = `<section id="styles-panel" role="tabpanel" aria-labelledby="styles-tab" ${tab === 'styles' ? '' : 'hidden'}><p class="tweaks-note">A new feel for the whole game.</p><div class="theme-options" role="group" aria-label="Game style">${['flat', 'holofoil'].map(name => `<button class="theme-option ${name === selectedTheme ? 'is-selected' : ''}" data-action="theme-${name}" aria-pressed="${name === selectedTheme}"><span class="theme-preview theme-preview-${name}" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="theme-description"><strong>${name === 'flat' ? 'Flat' : 'Holofoil'}</strong><small>${name === 'flat' ? 'Soft colours. Simple little squares.' : 'Prismatic foil. A little shimmer.'}</small></span><span class="theme-check" aria-hidden="true">${name === selectedTheme ? '✓' : ''}</span></button>`).join('')}</div><p class="tweak-status">Style changes apply immediately and are saved.</p></section>`;
+    const stylesPanel = `<section id="styles-panel" role="tabpanel" aria-labelledby="styles-tab" ${tab === 'styles' ? '' : 'hidden'}><p class="tweaks-note">A new feel for the whole game.</p><div class="theme-options" role="group" aria-label="Game style">${Object.keys(styles).map(name => `<button class="theme-option ${name === selectedTheme ? 'is-selected' : ''}" data-action="theme-${name}" aria-pressed="${name === selectedTheme}"><span class="theme-preview theme-preview-${name}" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="theme-description"><strong>${styles[name][0]}</strong><small>${styles[name][1]}</small></span><span class="theme-check" aria-hidden="true">${name === selectedTheme ? '✓' : ''}</span></button>`).join('')}</div><p class="tweak-status">Style changes apply immediately and are saved.</p></section>`;
     const gameplayPanel = `<section id="gameplay-panel" role="tabpanel" aria-labelledby="gameplay-tab" ${tab === 'gameplay' ? '' : 'hidden'}><p class="tweaks-note">Choose what a clear is worth.</p><div class="gameplay-setting"><label class="game-toggle points-toggle"><span>Time-based points</span><input type="checkbox" role="switch" id="time-based-points" aria-label="Time-based points" ${timeBasedPoints ? 'checked' : ''}></label><p>Replace the cleared counter with points earned from each tile. Up to 100 points per clear.</p><fieldset class="points-options" ${timeBasedPoints ? '' : 'disabled'}><legend>Reward timing</legend><label><input type="radio" name="points-preference" value="fast" ${pointsPreference === 'fast' ? 'checked' : ''}><span><strong>Faster clears</strong><small>More time left means more points.</small></span></label><label><input type="radio" name="points-preference" value="late" ${pointsPreference === 'late' ? 'checked' : ''}><span><strong>Closer to expiry</strong><small>Less time left means more points. Clear before the circle empties.</small></span></label></fieldset></div><p class="tweak-status">Applies to your next timed run. Zen always counts completions.</p></section>`;
     openDialog('tweaks', `<div class="dialog-eyebrow">MAKE IT YOURS</div><h2 id="dialog-title">Tweaks</h2>${tabs}${gamesPanel}${stylesPanel}${gameplayPanel}<button class="primary-button" data-action="close">Done</button>`);
     if (tab === 'games') $('dialog-content').querySelectorAll('[data-preview]').forEach(container => previews.push(window.LittleRushPreviews.create(container, container.dataset.preview, { settleMs: completionDelay(container.dataset.preview), onFeedback: kind => { initAudio(); feedback(kind); } })));
@@ -260,8 +262,8 @@
     if (action === 'help') showHelp();
     if (action === 'back-pause') showPauseMenu();
     if (['games-tab', 'styles-tab', 'gameplay-tab'].includes(action)) { showTweaks(action.replace('-tab', '')); $('dialog-content').querySelector(`[data-action="${action}"]`)?.focus({ preventScroll: true }); }
-    if (action === 'theme-flat' || action === 'theme-holofoil') {
-      selectedTheme = action === 'theme-holofoil' ? 'holofoil' : 'flat'; save('little-rush-theme-v1', selectedTheme);
+    if (action?.startsWith('theme-') && Object.hasOwn(styles, action.slice(6))) {
+      selectedTheme = action.slice(6); save('little-rush-theme-v1', selectedTheme);
       window.LittleRushTheme?.setTheme(selectedTheme); showTweaks('styles');
       $('dialog-content').querySelector(`[data-action="${action}"]`)?.focus({ preventScroll: true });
     }
@@ -297,6 +299,9 @@
   dialog.addEventListener('cancel', event => { event.preventDefault(); if (modalKind === 'pause') resumeRun(); else if (modalKind === 'help') showPauseMenu(); else if (modalKind === 'tweaks') closeDialog(); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && !dialog.open && !atHome && engine.status === 'running') { event.preventDefault(); pauseRun(); } });
   document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun(); else if (atHome) renderRecords(); });
+  // Keep touch gestures inside the games; Tweaks retains its own vertical scrolling.
+  $('play-screen').addEventListener('touchmove', event => event.preventDefault(), {passive: false});
+  for (const name of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(name, event => { if (!atHome && !dialog.open) event.preventDefault(); }, {passive: false});
   window.addEventListener('blur', () => { previews.forEach(preview => preview.tick(0, false)); if (!dialog.open) pauseRun(); });
   window.addEventListener('pagehide', () => { if (!atHome) { if (engine.status === 'running') engine.pause(performance.now()); updateRecords(engine.snapshot(performance.now())); } });
   window.LittleRushTheme?.setTheme(selectedTheme);

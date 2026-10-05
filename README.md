@@ -1,6 +1,6 @@
 # Little Rush
 
-A mobile-first 2D micro-game collection with 29 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.11.1 gives the planets more space in a larger sky and adds dotted grips to the slider handles. Refined controls and flat artwork keep the games clear at small sizes. No libraries, external assets, account or network connection are required to play.
+A mobile-first collection of 29 playable micro-games, built with HTML, CSS and JavaScript. Version 0.12.0 adds an optional Three.js Aero style, unique active games, larger peg targets and shooting controls, compact phone margins, drag-location rings, and shorter gift boards. All assets, including the MIT-licensed Three.js bundle, ship locally; no account or network connection is required to play.
 
 ## Play
 
@@ -21,8 +21,8 @@ Future pushes to `main` update the site automatically. See [GitHub's publishing-
 
 ## Rules and butterfly
 
-- The portrait board has 2 columns and 4 rows of square slots.
-- The board starts empty; after a 650ms breath, a random eligible game appears. On Normal, a new game appears every **2.5 seconds** in a random empty slot. When all eight slots are occupied, that spawn is skipped; the next scheduled spawn uses an available slot.
+- The portrait board has 2 columns and 4 rows. Tiles use the available width and compress vertically on short screens.
+- The board starts empty; after a 650ms breath, a random eligible game appears. On Normal, a new game appears every **2.5 seconds** in a random empty slot. When all eight slots are occupied, or every eligible game is already visible, that spawn is skipped. Active and finishing tiles reserve their game type: duplicate game tiles never appear.
 - On Normal, every tile has **25 seconds**. Its filled top-right circle empties as time runs out and turns red in the final 4 seconds. A single expired tile ends the run.
 - **WAIT & HATCH** can appear randomly during the run: wait 3 seconds for the caterpillar to become a chrysalis, then tap to release a butterfly. It appears only once per run. **CRACK IT** games are geodes: tap a randomized 5–11 times to crack the shell and reveal glowing crystals.
 - The butterfly flutters over the board for the rest of that run. Hatching unlocks **FEED BUTTERFLY** when that game is enabled, queuing it for the next spawn. Later Feed tiles can appear randomly, with at most one active at a time in timed modes.
@@ -34,7 +34,7 @@ Future pushes to `main` update the site automatically. See [GitHub's publishing-
 
 The main menu defaults to **Normal** (2.5-second spawns, 25-second expiry). **Calm** uses 3-second spawns and 30-second expiry; **Extreme** uses 1.5-second spawns and 15-second expiry. The selection is saved locally and applied at the next run.
 
-**Zen** starts with all eight slots filled and immediately replaces a completed game after its finishing animation. Tiles never expire. The HUD shows only the number completed and a Zen label: no points or run timer. Timing-based points preferences are retained for timed modes. Zen does not change timed-run records. Games keep their own interaction timing, such as Simon playback and the aim trainer. Hatch appears at most once per run, including Zen. Other enabled games fill the remaining slots; Feed can repeat after hatching. Zen requires at least one enabled game besides Hatch and Feed so all eight slots can be filled from the start.
+**Zen** fills the board with distinct available games and immediately replaces a completed game after its finishing animation. If fewer than eight distinct games are available, spare slots remain empty until another becomes eligible. Tiles never expire. The HUD shows only the number completed and a Zen label: no points or run timer. Timing-based points preferences are retained for timed modes. Zen does not change timed-run records. Games keep their own interaction timing, such as Simon playback and the aim trainer. Hatch appears at most once per run, including Zen. Other enabled games fill the remaining slots; Feed can repeat after hatching. Zen requires at least one enabled game besides Hatch and Feed to start a run.
 
 In **Tweaks → Gameplay**, enable **Time-based points** to replace the top-left cleared count with a cumulative points score. **Faster clears** awards the rounded percentage of tile lifetime remaining (1–100 points); **Closer to expiry** awards the rounded percentage elapsed (1–100). Expired tiles earn nothing. Both use active game time, so pausing cannot alter the reward. Completed tiles display their award briefly, while the engine continues tracking cleared count independently. Existing title-screen cleared records remain completion records.
 
@@ -52,14 +52,16 @@ Practice directly in any tile, including games disabled for runs. A completed ti
 - At least one repeatable challenge must be enabled to start. **WAIT & HATCH** alone is not a valid pool. Zen also needs a game that is available before Feed unlocks.
 - The first challenge is randomly chosen from the enabled, currently available games; Hatch has no special priority.
 
-In **Styles**, choose **Flat** or **Holofoil**. Style changes apply immediately, are saved in this browser and are restored when the game is reopened.
+In **Styles**, choose **Flat**, **Holofoil**, or **Aero 3D**. Style changes apply immediately, are saved in this browser and are restored when the game is reopened.
 
 - **Flat** is the default minimal pastel appearance.
 - **Holofoil** uses a dark backdrop, matte pearl tiles with a reflective foil bevel and engraved corner detail and a brief perspective landing when a tile appears. A WebGL fragment shader produces the moving foil highlights and responds to the pointer, with a subtle touch-position tilt that follows input directly and eases back on release; category colors and readable game controls remain distinct.
 - With the system's reduced-motion preference enabled, foil highlights remain still and the landing animation is removed. Foil animation also pauses while a dialog is open or the page is hidden.
 - If WebGL is unavailable or its context is lost, Holofoil keeps a static CSS foil finish. Game controls continue to work.
 
-Tile colors identify five consistent categories:
+**Aero 3D** uses beveled glass frames, a reflected sky, curved leaves, translucent bubbles and raised controls throughout the app. One shared Three.js renderer draws only visible tiles at a capped resolution and 30fps. Touch highlights follow input immediately, with a restrained tilt and a soft release; precision dragging surfaces stay level. Motion pauses for hidden pages and pause dialogs. Reduced motion gives a still finish, and unavailable/lost WebGL falls back to CSS. Switching styles releases the old renderer and its resources. The shipped bundle needs no CDN.
+
+Flat and Holofoil tile colors identify five consistent categories:
 
 | Color | Category | Games |
 | --- | --- | --- |
@@ -85,10 +87,10 @@ Tile colors identify five consistent categories:
 | CUT THE WIRE | Trace randomly labelled letter/digit endpoints and cut the requested wire. |
 | TURN UPRIGHT | Rotate the beetle upright. |
 | TYPE THE WORD | Enter one of 106 nature-themed words using the tile's letter keys. |
-| DRAG TO EXIT | Draw a smooth path through a generated 5×5 maze. The dot follows continuously, sliding along walls without crossing them; arrow keys remain available. |
+| DRAG TO EXIT | Draw a smooth path through a generated 5×5 maze. The dot follows continuously, sliding along walls without crossing them; arrow keys remain available. A larger ring follows the dot while dragging. |
 | SIGN HERE | Draw any sufficiently long signature inside the box, then lift your finger. |
 | REMEMBER | Remember a five-character code containing letters and digits. Press Start to hide it and reveal the keys. A mistake reveals it again for a deliberate retry. |
-| SLIDE TO MARKS | Drag three tall rectangular handles along full-height tracks into the green target areas. No visible target numbers or center ticks; tapping the track does not move them. |
+| SLIDE TO MARKS | Drag three tall rectangular handles along full-height tracks into the green target areas. No visible target numbers or center ticks; tapping the track does not move them. Dotted grips and a larger held outline keep the handles visible beneath a finger. |
 | CATCH IT | Move the claw with the bottom left/right arrows, then press the center Drop button. Hold an arrow for continuous movement from the first frame, tap for a tiny nudge, then release for a stronger, naturally settling momentum swing. The rod extends over 700ms, pauses to grab, and retracts before completion. |
 | UPLOAD | Tap Upload, wait for the three-second progress bar, then tap Complete. |
 | JOIN PIPES | Rotate six pipe segments to connect the two endpoints of a generated puzzle. |
@@ -99,11 +101,11 @@ Tile colors identify five consistent categories:
 | MAKE THREE | Tap two neighboring shapes or drag a tile to swap. The tile follows one cardinal direction while its neighbor shifts in response. Make a horizontal or vertical line of three. Invalid swaps return; every board has a solution. |
 | HIT THREE PEGS | Tap or drag to aim from above, then press Shoot. The preview follows the shot physics and shows the first rebound when it reaches a peg. Hit all three marked gold pegs across as many shots as needed. Each field randomizes the peg positions and count with safe gaps. Arrow keys aim and Space shoots. |
 | FIND THE PLANET | Drag the enlarged sky view, or use arrow keys. The four planets have fresh, separated positions each game. Center the planet matching the large reference straddling the telescope edge for 400ms to lock on. A ring indicates progress without extra text. |
-| LAND ON THE GIFT | Choose from four fixed dice, using each at most once. Reach a gift 6–12 spaces away along a freshly generated sequence of separated steps. At least one combination lands exactly. Overshooting restores the same four dice and sends the pawn back to the start; no new dice appear between moves. |
+| LAND ON THE GIFT | Choose from four fixed dice, using each at most once. Reach the gift on a freshly generated path of 3–8 visible spaces, including the starting space and gift. At least one combination lands exactly. Overshooting restores the same four dice and sends the pawn back to the start; no new dice appear between moves. |
 | PUTT IT IN | Drag back from the ball to aim and set power, then release. A solid line behind the ball changes from white to red as power increases. Courses vary the start, cup, turf, and round or rectangular obstacles. The start and cup are at least 90 game units apart. Keep putting until the ball drops into the cup. Arrow keys adjust aim/power; Space shoots. |
 | FEED BUTTERFLY | Drag a smiling flower across the board to the unlocked butterfly. |
 
-Select **Let's play** on the title screen to start a run. The play screen gives most of the portrait viewport to its eight square tiles. The compact header, six-pixel tile padding and larger controls accommodate both touch and mouse input; keyboard alternatives are also available for the supported interactions.
+Select **Let's play** on the title screen to start a run. The play screen uses 4px side margins outside device safe areas and a compact header. The board cannot scroll or zoom through play gestures; Tweaks retains its own scrolling. Both shooting controls span their tile width. Keyboard alternatives are also available for supported interactions.
 
 ## Extend
 
@@ -115,7 +117,9 @@ Select **Let's play** on the title screen to start a run. The play screen gives 
 - `previews.js`: isolated practice clocks, completion resets, visibility pausing, and the practice butterfly.
 - `app.js`: title and play screens, the one-time hatch and Feed gating, Tweaks selections, countdowns, sounds and local daily/all-time records.
 - `styles.css`: compact responsive portrait board, title screen and dialogs.
-- `theme.js` and `theme.css`: Flat/Holofoil appearance, shared WebGL foil rendering, tile landing animation, reduced-motion support and the CSS fallback.
+- `theme.js` and `theme.css`: appearance selection, shared WebGL foil rendering, tile landing animation, reduced-motion support and the CSS fallback.
+- `aero.js` and `aero.css`: Aero materials, shared Three.js rendering, visible-tile lifecycle, responsive touch lighting and the full-app glass treatment.
+- `three-entry.js`, `vendor/three.min.js`, and `vendor/THREE-LICENSE.txt`: the selected Three.js exports, committed browser bundle and MIT license. Run `npm ci` then `npm run vendor` only when updating that bundle.
 
 Add a pack with `LittleRushGames.register(catalogEntries, mountFunction)`. Each catalog entry is `{id, title, color}`. The mounter receives `(container, type, options)` and returns `tick(ageMs, deltaMs)` and `destroy()`. Call `options.onComplete()` on success, use the supplied game clock for animation, and remove listeners/pointer captures on destruction. `options.demo` makes previews inert.
 
@@ -125,6 +129,6 @@ Add a pack with `LittleRushGames.register(catalogEntries, mountFunction)`. Each 
 
 Run `npm test` / `node --test tests/*.test.cjs`. Tests cover all 29 games, 2.5-second spawns, 25-second deadline boundaries, full-board handling, queue/unlock logic, pointer ownership, cooldowns, upload states, pause/restart/expiry cleanup, and the integrated hatch-to-feed lifecycle. Generated layouts are checked across hundreds of seeds: solvable match-three and fixed-dice boards, connected bubble racks, separated pegs, and traversable golf courses. Shot solvers exercise randomized peg fields and golf completion at 30, 60 and 120fps. Regression checks cover persistent bubble racks, responsive field coordinates, and continuous tilt with cancellation and reduced motion. DOM test doubles verify logic; browser checks verify rendered layout and real pointer behavior.
 
-The browser QA checklist includes the hatch-to-butterfly-to-flower sequence, shape drops, wire cuts, bounded switch knobs, slider and shape-tile drags, claw arrow controls, ignored track taps, upload progression, generated maze routes and blocked wall shortcuts, pipe solutions, geode reveal, math cooldown, compact tile layouts, portrait phone sizes, records, and persistent Tweaks selections. Check both Styles choices, saved theme restoration, Holofoil's reduced-motion behavior and its WebGL fallback. Also check loading and starting with every asset served under a `/Little-rush/` path. No physical iOS/Android device testing has been performed.
+The browser QA checklist includes the hatch-to-butterfly-to-flower sequence, shape drops, wire cuts, bounded switch knobs, slider and shape-tile drags, claw arrow controls, ignored track taps, upload progression, generated maze routes and blocked wall shortcuts, pipe solutions, geode reveal, math cooldown, compact tile layouts, portrait phone sizes, records, and persistent Tweaks selections. Check all three Styles choices, saved theme restoration, motion preferences, renderer cleanup and WebGL fallback. Also check loading and starting with every asset served under a `/Little-rush/` path. No physical iOS/Android device testing has been performed.
 
 For isolated interaction checks, open `/tests/playground.html` from the local server. It exposes the full catalog without run deadlines and lets you inspect 128px, 174px and 211px tiles.

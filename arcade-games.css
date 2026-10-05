@@ -6,7 +6,7 @@
 .mg-arcade .arc-scene[tabindex]:active { cursor: grabbing; }
 .arc-caption { width: 100%; flex: 0 0 auto; min-height: 10px; text-align: center; font-size: clamp(6px, 4.1cqw, 9px); font-weight: 650; letter-spacing: .045em; line-height: 1.3; color: #506952; pointer-events: none; }
 .arc-controls { display: flex; justify-content: center; width: 100%; flex: 0 0 clamp(27px, 20cqw, 40px); }
-.arc-controls .arc-fire { width: 65%; }
+.arc-controls .arc-fire { width: 100%; }
 .mg .arc-controls button { background: #fffaf0d9; border: 1px solid #68816c28; border-radius: 9px; box-shadow: 0 2px 0 #526e4921; transition: background .1s, box-shadow .1s, opacity .15s; }
 .mg .arc-controls button:active, .mg .arc-controls button.is-held { background: #fafdf0; box-shadow: inset 0 1px 3px #526e492b; transform: none; }
 .mg .arc-controls button:disabled { opacity: .45; }
