@@ -2,11 +2,12 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const catalog = window.LittleRushGames.catalog;
-  const difficulties = { calm: { spawn: 3000, expiry: 30000 }, normal: { spawn: 2500, expiry: 25000 }, extreme: { spawn: 1500, expiry: 15000 } };
+  const difficulties = { zen: { spawn: 2500, expiry: 25000 }, calm: { spawn: 3000, expiry: 30000 }, normal: { spawn: 2500, expiry: 25000 }, extreme: { spawn: 1500, expiry: 15000 } };
   let difficulty = readSaved('little-rush-difficulty', 'normal');
   if (!Object.hasOwn(difficulties, difficulty)) difficulty = 'normal';
   let lifetime = difficulties[difficulty].expiry;
   const previews = [];
+  const completionDelay = type => type === 'break' ? 880 : ['roll', 'connect', 'match'].includes(type) ? 720 : 480;
   const savedGameplay = readJSON('little-rush-gameplay-v1', {});
   let timeBasedPoints = savedGameplay?.timeBasedPoints === true;
   let pointsPreference = savedGameplay?.pointsPreference === 'late' ? 'late' : 'fast';
@@ -52,6 +53,7 @@
     $('today-score').textContent = records.daily.score;
   }
   function updateRecords(state) {
+    if (state.zen) return;
     refreshDay();
     for (const record of [records.allTime, records.daily]) {
       record.timeMs = Math.max(record.timeMs, positive(state.elapsedMs));
@@ -61,11 +63,11 @@
     save('little-rush-best-v3', records.allTime.timeMs);
     renderRecords();
   }
-  function canStart() { return catalog.some(game => game.id !== 'press' && !disabledGames.has(game.id) && (game.id !== 'feed' || !disabledGames.has('press'))); }
+  function canStart() { return catalog.some(game => (difficulty === 'zen' || game.id !== 'press') && !disabledGames.has(game.id) && (game.id !== 'feed' || !disabledGames.has('press'))); }
   function syncStart() {
     $('start-button').disabled = !canStart();
     $('start-button').setAttribute('aria-label', canStart() ? "Let's play" : 'Enable a repeatable micro-game in Tweaks to play');
-    $('home-note').textContent = canStart() ? 'Personal records, saved on this device.' : 'Enable a repeatable micro-game in Tweaks to play.';
+    $('home-note').textContent = canStart() ? difficulty === 'zen' ? 'No rush. Just a count of games completed.' : 'Personal records, saved on this device.' : 'Enable a repeatable micro-game in Tweaks to play.';
   }
   function initAudio() {
     if (!soundEnabled) return;
@@ -85,15 +87,16 @@
     types: catalog.map(game => game.id), firstSpawnDelayMs: 650,
     isTypeAvailable(type, state) {
       if (disabledGames.has(type)) return false;
+      if (engine.zen) return type !== 'feed' || habitat.active;
       if (type === 'press') return !hatchIntroduced;
       if (type === 'feed') return habitat.active && !state.tiles.some(tile => tile?.type === 'feed');
       return true;
     },
     onSpawn(tile) {
       if (tile.type === 'press') hatchIntroduced = true;
-      tone(680, 0, .07, .022);
+      if (!engine.zen) tone(680, 0, .07, .022);
       const game = catalog.find(item => item.id === tile.type);
-      announce(`${game.title} appeared in row ${Math.floor(tile.slot / 2) + 1}, column ${tile.slot % 2 + 1}. ${lifetime / 1000} seconds.`);
+      announce(`${game.title} appeared in row ${Math.floor(tile.slot / 2) + 1}, column ${tile.slot % 2 + 1}. ${engine.zen ? 'Take your time.' : lifetime / 1000 + ' seconds.'}`);
     },
     onComplete(tile, state) {
       if (tile.type === 'press' && habitat.hatch(tile.slot, state.elapsedMs) && !disabledGames.has('feed')) engine.enqueueType('feed');
@@ -102,10 +105,11 @@
         const reward = document.createElement('span'); reward.className = 'tile-points'; reward.textContent = `+${tile.points}`;
         cells[tile.slot].append(reward);
       }
-      tone(660, 0, .11); tone(880, .07, .16, .025); announce(timeBasedPoints ? `${tile.points} points. Total ${state.points}.` : `${state.score} cleared.`);
+      tone(660, 0, .11); tone(880, .07, .16, .025); announce(usesPoints() ? `${tile.points} points. Total ${state.points}.` : `${state.score} cleared.`);
     },
     onEnd(tile, state) { updateRecords(state); tone(330, 0, .18, .03); tone(247, .13, .25, .025); showResult(tile, state); }
   });
+  function usesPoints() { return timeBasedPoints && !engine.zen; }
   function destroyViews() { for (const view of views.values()) view.api.destroy(); views.clear(); }
   function piePath(fraction) {
     if (fraction >= .999999) return 'M12 2A10 10 0 1 1 12 22A10 10 0 1 1 12 2Z';
@@ -113,7 +117,7 @@
     const angle = fraction * Math.PI * 2 - Math.PI / 2;
     return `M12 12L12 2A10 10 0 ${fraction > .5 ? 1 : 0} 1 ${(12 + 10 * Math.cos(angle)).toFixed(3)} ${(12 + 10 * Math.sin(angle)).toFixed(3)}Z`;
   }
-  function timerMarkup() { return `<div class="tile-timer" role="img" aria-label="${lifetime / 1000} seconds remaining"><svg viewBox="0 0 24 24" aria-hidden="true"><circle class="timer-track" cx="12" cy="12" r="10"/><path class="timer-fill" d="${piePath(1)}"/></svg></div>`; }
+  function timerMarkup() { return engine.zen ? '' : `<div class="tile-timer" role="img" aria-label="${lifetime / 1000} seconds remaining"><svg viewBox="0 0 24 24" aria-hidden="true"><circle class="timer-track" cx="12" cy="12" r="10"/><path class="timer-fill" d="${piePath(1)}"/></svg></div>`; }
   function emptyCell(cell, slot) {
     cell.className = 'tile empty'; cell.removeAttribute('data-game'); cell.removeAttribute('data-tile-id');
     cell.setAttribute('aria-label', `Empty slot ${slot + 1}`); cell.innerHTML = '<span class="empty-mark" aria-hidden="true">+</span>'; cell.dataset.view = 'empty';
@@ -125,7 +129,7 @@
     cell.innerHTML = `<header class="tile-header"><span class="tile-title">${game.title}</span>${timerMarkup()}</header><div class="microgame"></div>`;
     const timer = cell.querySelector('.tile-timer'), fill = cell.querySelector('.timer-fill');
     const api = window.LittleRushGames.mount(cell.querySelector('.microgame'), game.id, {
-      butterfly: habitat, onComplete: () => engine.complete(tile.id, performance.now(), game.id === 'break' ? 880 : ['roll', 'connect', 'match'].includes(game.id) ? 720 : 480), onFeedback: feedback
+      butterfly: habitat, onComplete: () => engine.complete(tile.id, performance.now(), completionDelay(game.id)), onFeedback: feedback
     });
     views.set(tile.slot, { api, id: tile.id, type: game.id, timer, fill, lastSeconds: -1 });
   }
@@ -145,11 +149,15 @@
     $('home-screen').hidden = true; $('play-screen').hidden = false; $('pause-button').disabled = false;
     engine.types = catalog.filter(game => !disabledGames.has(game.id)).map(game => game.id);
     engine.initialType = null;
+    engine.zen = difficulty === 'zen';
     engine.spawnIntervalMs = difficulties[difficulty].spawn;
     engine.tileLifetimeMs = lifetime = difficulties[difficulty].expiry;
-    engine.scoringMode = timeBasedPoints ? pointsPreference : 'off';
-    $('hud-score').setAttribute('aria-label', timeBasedPoints ? 'Points scored' : 'Challenges cleared');
-    $('hud-score').classList.toggle('shows-points', timeBasedPoints);
+    engine.scoringMode = usesPoints() ? pointsPreference : 'off';
+    $('hud-score').setAttribute('aria-label', usesPoints() ? 'Points scored' : 'Challenges cleared');
+    $('hud-score').classList.toggle('shows-points', usesPoints());
+    $('run-time').classList.toggle('is-zen', engine.zen);
+    $('run-time').setAttribute('role', engine.zen ? 'status' : 'timer');
+    $('run-time').setAttribute('aria-label', engine.zen ? 'Zen mode. No time limit.' : 'Run time');
     lastShownTime = ''; lastShownScore = -1; lastFrame = performance.now();
     engine.start(lastFrame); render(engine.snapshot(lastFrame), lastFrame, 0);
     $('pause-button').focus({ preventScroll: true });
@@ -157,10 +165,10 @@
   function render(state, now, delta) {
     if (atHome) return;
     habitat.update(state.elapsedMs, state.status === 'running');
-    const formatted = timeText(state.elapsedMs, true);
+    const formatted = state.zen ? 'zen' : timeText(state.elapsedMs, true);
     if (formatted !== lastShownTime) { $('run-time').innerHTML = formatted; lastShownTime = formatted; }
-    const shownScore = timeBasedPoints ? state.points : state.score;
-    if (shownScore !== lastShownScore) { $('score').textContent = String(shownScore); $('score').setAttribute('aria-label', timeBasedPoints ? `${state.points} points` : `${state.score} cleared`); lastShownScore = shownScore; }
+    const shownScore = usesPoints() ? state.points : state.score;
+    if (shownScore !== lastShownScore) { $('score').textContent = String(shownScore); $('score').setAttribute('aria-label', usesPoints() ? `${state.points} points` : `${state.score} cleared`); lastShownScore = shownScore; }
     cells.forEach((cell, slot) => {
       const tile = state.tiles[slot]; let view = views.get(slot);
       if (view && (!tile || view.id !== tile.id)) { view.api.destroy(); views.delete(slot); view = null; }
@@ -168,15 +176,15 @@
       if (!view) { mountTile(cell, catalog.find(game => game.id === tile.type), tile); view = views.get(slot); }
       if (tile.completedAt !== undefined) {
         cell.classList.remove('urgent'); cell.classList.add('is-solved');
-        cell.classList.toggle('is-clearing', tile.releaseInMs <= 170);
-        cell.setAttribute('aria-label', 'Challenge cleared'); view.timer.hidden = true;
+        cell.classList.toggle('is-clearing', !state.zen && tile.releaseInMs <= 170);
+        cell.setAttribute('aria-label', 'Challenge cleared'); if (view.timer) view.timer.hidden = true;
         return;
       }
-      view.fill.setAttribute('d', piePath(tile.remainingMs / lifetime));
+      view.fill?.setAttribute('d', piePath(tile.remainingMs / lifetime));
       const seconds = Math.ceil(tile.remainingMs / 1000);
-      if (seconds !== view.lastSeconds) { view.timer.setAttribute('aria-label', `${seconds} seconds remaining`); view.lastSeconds = seconds; }
-      cell.classList.toggle('urgent', tile.remainingMs <= 4000); cell.classList.toggle('expired', tile.id === state.expiredTileId);
-      if (state.status === 'running') view.api.tick(lifetime - tile.remainingMs, delta);
+      if (seconds !== view.lastSeconds) { view.timer?.setAttribute('aria-label', `${seconds} seconds remaining`); view.lastSeconds = seconds; }
+      cell.classList.toggle('urgent', !state.zen && tile.remainingMs <= 4000); cell.classList.toggle('expired', tile.id === state.expiredTileId);
+      if (state.status === 'running') view.api.tick(tile.ageMs, delta);
     });
     $('pause-button').disabled = state.status !== 'running';
   }
@@ -184,6 +192,7 @@
     const delta = Math.min(100, Math.max(0, now - lastFrame)); lastFrame = now;
     if (!atHome) render(engine.tick(now), now, delta);
     else if (records.daily.date !== localDay()) renderRecords();
+    previews.forEach(preview => preview.tick(delta, modalKind === 'tweaks' && tweaksTab === 'games' && !document.hidden));
     requestAnimationFrame(frame);
   }
   function openDialog(kind, content) {
@@ -203,6 +212,10 @@
     updateRecords(engine.snapshot(performance.now())); showPauseMenu();
   }
   function showHelp() {
+    if (engine.zen) {
+      openDialog('help', '<div class="dialog-eyebrow">ZEN MODE</div><h2 id="dialog-title">Take your time.</h2><ul class="help-steps"><li>Eight games, always ready to play.</li><li>No expiry timers and no points. Your counter records games completed.</li><li>Each completed game makes room for a fresh one.</li><li>Timed-run records stay separate. Pause or return to the title whenever you like.</li></ul><button class="primary-button" data-action="back-pause">Back to pause</button>');
+      return;
+    }
     openDialog('help', '<div class="dialog-eyebrow">HOW TO PLAY</div><h2 id="dialog-title">Keep up.</h2><ul class="help-steps"><li>A new tile every 2.5 seconds.</li><li>Clear each within 25 seconds. Its filled circle counts down.</li><li>One empty circle ends the run.</li><li>Switch between tiles in any order.</li><li>Wait for the chrysalis, then tap. Drag nectar to the butterfly.</li></ul><div class="category-key"><span><i style="background:var(--butter)"></i>Numbers</span><span><i style="background:var(--lavender)"></i>Memory</span><span><i style="background:var(--blue)"></i>Spatial</span><span><i style="background:var(--sage)"></i>Precision</span><span><i style="background:var(--peach)"></i>Nature & time</span></div><button class="primary-button" data-action="back-pause">Back to pause</button>'.replace('2.5 seconds', (engine.spawnIntervalMs / 1000) + ' seconds').replace('25 seconds', (lifetime / 1000) + ' seconds'));
   }
   function showResult(tile, state) {
@@ -214,18 +227,19 @@
   function saveGameplay() { save('little-rush-gameplay-v1', JSON.stringify({ timeBasedPoints, pointsPreference })); }
   function showTweaks(tab = tweaksTab) {
     tweaksTab = tab;
-    const toggles = catalog.map(game => `<article class="game-option"><div class="tile ${game.color} game-preview" aria-hidden="true" inert><header class="tile-header"><span class="tile-title">${game.title}</span></header><div class="microgame" data-preview="${game.id}"></div></div><label class="game-toggle"><span>${game.title}</span><input type="checkbox" role="switch" data-game-toggle="${game.id}" aria-label="Allow ${game.title}" ${disabledGames.has(game.id) ? '' : 'checked'} ${game.id === 'feed' && disabledGames.has('press') ? 'disabled' : ''}></label></article>`).join('');
+    const toggles = catalog.map(game => `<article class="game-option"><div class="tile ${game.color} game-preview" aria-label="Practice ${game.title}"><header class="tile-header"><span class="tile-title">${game.title}</span></header><div class="microgame" data-preview="${game.id}"></div></div><label class="game-toggle"><span>${game.title}</span><input type="checkbox" role="switch" data-game-toggle="${game.id}" aria-label="Allow ${game.title}" ${disabledGames.has(game.id) ? '' : 'checked'} ${game.id === 'feed' && disabledGames.has('press') ? 'disabled' : ''}></label></article>`).join('');
     const tabs = `<div class="tweaks-tabs" role="tablist" aria-label="Tweaks sections"><button id="games-tab" role="tab" data-action="games-tab" aria-controls="games-panel" aria-selected="${tab === 'games'}" tabindex="${tab === 'games' ? 0 : -1}">Micro-games</button><button id="styles-tab" role="tab" data-action="styles-tab" aria-controls="styles-panel" aria-selected="${tab === 'styles'}" tabindex="${tab === 'styles' ? 0 : -1}">Styles</button><button id="gameplay-tab" role="tab" data-action="gameplay-tab" aria-controls="gameplay-panel" aria-selected="${tab === 'gameplay'}" tabindex="${tab === 'gameplay' ? 0 : -1}">Gameplay</button></div>`;
-    const gamesPanel = `<section id="games-panel" role="tabpanel" aria-labelledby="games-tab" ${tab === 'games' ? '' : 'hidden'}><p class="tweaks-note">Choose what appears in your next run.</p><div class="tweak-presets"><button data-action="all-on">All on</button><button data-action="all-off">All off</button></div><div class="game-toggles">${toggles}</div><p class="tweak-status">${canStart() ? 'Feed needs Wait & Hatch. Choices are saved.' : 'Enable at least one repeatable game to play.'}</p></section>`;
+    const gamesPanel = `<section id="games-panel" role="tabpanel" aria-labelledby="games-tab" ${tab === 'games' ? '' : 'hidden'}><p class="tweaks-note">Try any game here. Completed games refresh automatically.</p><div class="tweak-presets"><button data-action="all-on">All on</button><button data-action="all-off">All off</button></div><div class="game-toggles">${toggles}</div><p class="tweak-status">${canStart() ? 'Feed needs Wait & Hatch. Choices are saved.' : 'Enable at least one repeatable game to play.'}</p></section>`;
     const stylesPanel = `<section id="styles-panel" role="tabpanel" aria-labelledby="styles-tab" ${tab === 'styles' ? '' : 'hidden'}><p class="tweaks-note">A new feel for the whole game.</p><div class="theme-options" role="group" aria-label="Game style">${['flat', 'holofoil'].map(name => `<button class="theme-option ${name === selectedTheme ? 'is-selected' : ''}" data-action="theme-${name}" aria-pressed="${name === selectedTheme}"><span class="theme-preview theme-preview-${name}" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="theme-description"><strong>${name === 'flat' ? 'Flat' : 'Holofoil'}</strong><small>${name === 'flat' ? 'Soft colours. Simple little squares.' : 'Prismatic foil. A little shimmer.'}</small></span><span class="theme-check" aria-hidden="true">${name === selectedTheme ? '✓' : ''}</span></button>`).join('')}</div><p class="tweak-status">Style changes apply immediately and are saved.</p></section>`;
-    const gameplayPanel = `<section id="gameplay-panel" role="tabpanel" aria-labelledby="gameplay-tab" ${tab === 'gameplay' ? '' : 'hidden'}><p class="tweaks-note">Choose what a clear is worth.</p><div class="gameplay-setting"><label class="game-toggle points-toggle"><span>Time-based points</span><input type="checkbox" role="switch" id="time-based-points" aria-label="Time-based points" ${timeBasedPoints ? 'checked' : ''}></label><p>Replace the cleared counter with points earned from each tile. Up to 100 points per clear.</p><fieldset class="points-options" ${timeBasedPoints ? '' : 'disabled'}><legend>Reward timing</legend><label><input type="radio" name="points-preference" value="fast" ${pointsPreference === 'fast' ? 'checked' : ''}><span><strong>Faster clears</strong><small>More time left means more points.</small></span></label><label><input type="radio" name="points-preference" value="late" ${pointsPreference === 'late' ? 'checked' : ''}><span><strong>Closer to expiry</strong><small>Less time left means more points. Clear before the circle empties.</small></span></label></fieldset></div><p class="tweak-status">Applies to your next run. Choices are saved.</p></section>`;
+    const gameplayPanel = `<section id="gameplay-panel" role="tabpanel" aria-labelledby="gameplay-tab" ${tab === 'gameplay' ? '' : 'hidden'}><p class="tweaks-note">Choose what a clear is worth.</p><div class="gameplay-setting"><label class="game-toggle points-toggle"><span>Time-based points</span><input type="checkbox" role="switch" id="time-based-points" aria-label="Time-based points" ${timeBasedPoints ? 'checked' : ''}></label><p>Replace the cleared counter with points earned from each tile. Up to 100 points per clear.</p><fieldset class="points-options" ${timeBasedPoints ? '' : 'disabled'}><legend>Reward timing</legend><label><input type="radio" name="points-preference" value="fast" ${pointsPreference === 'fast' ? 'checked' : ''}><span><strong>Faster clears</strong><small>More time left means more points.</small></span></label><label><input type="radio" name="points-preference" value="late" ${pointsPreference === 'late' ? 'checked' : ''}><span><strong>Closer to expiry</strong><small>Less time left means more points. Clear before the circle empties.</small></span></label></fieldset></div><p class="tweak-status">Applies to your next timed run. Zen always counts completions.</p></section>`;
     openDialog('tweaks', `<div class="dialog-eyebrow">MAKE IT YOURS</div><h2 id="dialog-title">Tweaks</h2>${tabs}${gamesPanel}${stylesPanel}${gameplayPanel}<button class="primary-button" data-action="close">Done</button>`);
-    if (tab === 'games') $('dialog-content').querySelectorAll('[data-preview]').forEach(container => previews.push(window.LittleRushGames.mount(container, container.dataset.preview, { demo: true })));
+    if (tab === 'games') $('dialog-content').querySelectorAll('[data-preview]').forEach(container => previews.push(window.LittleRushPreviews.create(container, container.dataset.preview, { settleMs: completionDelay(container.dataset.preview), onFeedback: kind => { initAudio(); feedback(kind); } })));
   }
   function syncDifficulty() {
     document.querySelectorAll('[data-difficulty]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.difficulty === difficulty)));
     const mode = difficulties[difficulty];
-    $('difficulty-detail').textContent = `A game every ${mode.spawn / 1000}s · ${mode.expiry / 1000}s to clear`;
+    $('difficulty-detail').textContent = difficulty === 'zen' ? 'A full board · no time limits · count your clears' : `A game every ${mode.spawn / 1000}s · ${mode.expiry / 1000}s to clear`;
+    syncStart();
   }
   $('difficulty-options').addEventListener('click', event => {
     const name = event.target.closest('[data-difficulty]')?.dataset.difficulty;
@@ -281,7 +295,7 @@
   dialog.addEventListener('cancel', event => { event.preventDefault(); if (modalKind === 'pause') resumeRun(); else if (modalKind === 'help') showPauseMenu(); else if (modalKind === 'tweaks') closeDialog(); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && !dialog.open && !atHome && engine.status === 'running') { event.preventDefault(); pauseRun(); } });
   document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun(); else if (atHome) renderRecords(); });
-  window.addEventListener('blur', () => { if (!dialog.open) pauseRun(); });
+  window.addEventListener('blur', () => { previews.forEach(preview => preview.tick(0, false)); if (!dialog.open) pauseRun(); });
   window.addEventListener('pagehide', () => { if (!atHome) { if (engine.status === 'running') engine.pause(performance.now()); updateRecords(engine.snapshot(performance.now())); } });
   window.LittleRushTheme?.setTheme(selectedTheme);
   syncDifficulty(); showHome(); requestAnimationFrame(frame);

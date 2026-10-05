@@ -109,7 +109,7 @@ function environment({ app = false, actualTiming = false, reducedMotion = false,
       register(entries, mounter) { catalog.push(...entries); feedMount = mounter; },
       mount(container, type, options) {
         if (type === 'feed') return feedMount(container, type, options);
-        const mounted = { type, options, destroyed: false }; mounts.push(mounted);
+        const mounted = { type, options, container, destroyed: false }; mounts.push(mounted);
         return { tick(ageMs) { mounted.age = ageMs; mounted.onTick?.(); }, destroy() { mounted.destroyed = true; } };
       },
     },
@@ -127,7 +127,8 @@ function environment({ app = false, actualTiming = false, reducedMotion = false,
   let habitat;
   if (app) {
     const Habitat = window.LittleRushButterfly.Habitat;
-    window.LittleRushButterfly.Habitat = class extends Habitat { constructor(container) { super(container); habitat = this; } };
+    window.LittleRushButterfly.Habitat = class extends Habitat { constructor(container) { super(container); habitat ??= this; } };
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../previews.js'), 'utf8'), context);
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8'), context);
   } else habitat = new window.LittleRushButterfly.Habitat(wrapper);
   const state = {
@@ -607,4 +608,76 @@ test('Gameplay saves its scoring preference, changes the HUD, and keeps cleared 
   assert.equal(env.document.getElementById('hud-score').getAttribute('aria-label'),'Points scored');
   const restored=environment({app:true,saved:Object.fromEntries(env.storage)});restored.document.getElementById('start-button').click();
   assert.equal(restored.engine.scoringMode,'late');
+});
+
+test('Zen fills the real board, hides deadlines, counts clears and preserves timed-run records and points preferences', () => {
+  const records = JSON.stringify({allTime: {timeMs: 90000, score: 30}, daily: {date: '2026-10-05', timeMs: 90000, score: 30}});
+  const env = environment({app: true, actualTiming: true, saved: {
+    'little-rush-difficulty': 'zen', 'little-rush-records-v1': records,
+    'little-rush-gameplay-v1': JSON.stringify({timeBasedPoints: true, pointsPreference: 'late'})
+  }});
+  env.document.getElementById('start-button').click();
+  assert.equal(env.engine.zen, true); assert.equal(env.engine.scoringMode, 'off');
+  assert.equal(env.engine.snapshot(0).tiles.filter(Boolean).length, 8);
+  assert.equal(env.board.querySelectorAll('.tile-timer').length, 0);
+  assert.equal(env.document.getElementById('run-time').textContent, 'zen');
+  env.advance(3600000); assert.equal(env.engine.status, 'running');
+  env.complete('press'); env.advance(3600016);
+  assert.equal(env.document.getElementById('score').textContent, '1');
+  assert.equal(env.engine.points, 0); assert.equal(env.board.querySelectorAll('.tile-points').length, 0);
+  env.advance(3600500); assert.equal(env.engine.snapshot(3600500).tiles.filter(Boolean).length, 8);
+  env.document.getElementById('pause-button').click(); env.action('help');
+  assert.match(env.document.getElementById('dialog-content').textContent, /No expiry timers/);
+  env.action('home'); assert.equal(env.storage.get('little-rush-records-v1'), records);
+  env.document.getElementById('difficulty-options').dispatch('click', {target: {closest: () => ({dataset: {difficulty: 'normal'}})}});
+  env.document.getElementById('start-button').click();
+  assert.equal(env.engine.zen, false); assert.equal(env.engine.scoringMode, 'late');
+  assert.equal(env.engine.snapshot(3600500).tiles.filter(Boolean).length, 0);
+});
+
+test('Zen can fill a hatch-only board and keeps hatch/feed pools full through repeated completions', () => {
+  const env = environment({app: true, actualTiming: true, saved: {'little-rush-difficulty': 'zen'}});
+  env.document.getElementById('tweaks-button').click(); env.action('all-off'); env.toggleGame('press', true);
+  assert.equal(env.document.getElementById('start-button').disabled, false);
+  env.toggleGame('feed', true); env.action('close'); env.document.getElementById('start-button').click();
+  assert.equal(env.engine.snapshot(0).tiles.filter(Boolean).length, 8);
+  assert.ok(env.engine.snapshot(0).tiles.every(tile => tile.type === 'press'));
+  env.advance(3000); env.complete('press'); env.advance(3500);
+  assert.equal(env.habitat.active, true); assert.ok(env.engine.snapshot(3500).tiles.some(tile => tile.type === 'feed'));
+  assert.equal(env.engine.snapshot(3500).tiles.filter(Boolean).length, 8);
+  env.complete('press'); env.advance(4000);
+  assert.equal(env.engine.snapshot(4000).tiles.filter(Boolean).length, 8);
+});
+
+test('Tweaks games play with independent clocks, retain the completed pose, then mount fresh puzzles', () => {
+  const env = environment({app: true});
+  env.document.getElementById('tweaks-button').click();
+  const old = env.mounts.find(m => m.type === 'switch');
+  assert.notEqual(old.options.demo, true);
+  assert.equal(old.container.parentElement.getAttribute('inert'), null);
+  env.advance(100); assert.equal(old.age, 100);
+  const records = env.storage.get('little-rush-records-v1'); old.options.onComplete();
+  assert.ok(old.container.parentElement.classList.contains('is-solved'));
+  for (const time of [200, 300, 400, 500]) env.advance(time);
+  assert.equal(old.destroyed, false); assert.equal(env.engine.score, 0);
+  env.advance(600); assert.equal(old.destroyed, true);
+  const fresh = env.mounts.filter(m => m.type === 'switch').at(-1);
+  assert.notEqual(fresh, old); assert.equal(fresh.destroyed, false);
+  old.options.onComplete(); assert.equal(fresh.container.parentElement.classList.contains('is-solved'), false);
+  assert.equal(env.storage.get('little-rush-records-v1'), records);
+  env.action('styles-tab'); assert.ok(env.mounts.every(m => m.destroyed));
+  env.advance(700); assert.equal(env.engine.status, 'idle');
+});
+
+test('Feed practice has its own butterfly, resets after feeding, and cleans up nectar on close', () => {
+  const env = environment({app: true}); env.document.getElementById('tweaks-button').click();
+  const content = env.document.getElementById('dialog-content');
+  const nectar = content.querySelector('.nectar-button'); const butterfly = content.querySelector('.board-butterfly');
+  assert.equal(butterfly.hidden, false); assert.equal(env.habitat.active, false);
+  nectar.dispatch('click', {detail: 0}); butterfly.click();
+  for (const time of [100, 200, 300, 400, 500]) env.advance(time);
+  const fresh = content.querySelector('.nectar-button'); assert.notEqual(fresh, nectar);
+  fresh.dispatch('pointerdown'); assert.ok(env.body.querySelector('.nectar-ghost'));
+  env.action('close'); assert.equal(env.body.querySelector('.nectar-ghost'), null);
+  assert.equal(env.habitat.active, false); assert.equal(env.engine.score, 0);
 });

@@ -167,7 +167,8 @@
       ghost = document.createElement('div');
       ghost.className = 'nectar-ghost';
       ghost.innerHTML = nectarArt;
-      document.body.append(ghost);
+      // A practice tile lives in the dialog's top layer, above the document.
+      (container.closest?.('dialog') || document.body).append(ghost);
       moveGhost(event);
     });
     listen('pointermove', event => { if (pointer === event.pointerId) { event.preventDefault(); moveGhost(event); } });

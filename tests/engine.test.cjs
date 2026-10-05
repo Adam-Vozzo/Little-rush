@@ -5,6 +5,48 @@ const Engine = require('../engine.js');
 const make = options => new Engine({ types: ['press', 'switch', 'sequence'], random: () => 0, ...options });
 const populated = snapshot => snapshot.tiles.filter(Boolean);
 
+test('Zen starts full, never expires, and counts completions without points', () => {
+  const e = make({zen: true, firstSpawnDelayMs: 650, scoringMode: 'fast'});
+  const initial = e.start(0);
+  assert.equal(populated(initial).length, 8); assert.equal(initial.nextSpawnInMs, null);
+  assert.ok(initial.tiles.every(tile => tile.deadline === null && tile.remainingMs === null));
+  const later = e.tick(86400000);
+  assert.equal(later.status, 'running'); assert.equal(later.expiredTileId, null);
+  assert.equal(later.tiles[0].ageMs, 86400000);
+  for (let i = 0; i < 20; i++) {
+    const tile = e.tiles[i % 8];
+    assert.equal(e.complete(tile.id, 86400000 + i), true);
+    assert.equal(populated(e.snapshot()).length, 8);
+    assert.notEqual(e.tiles[i % 8].id, tile.id);
+    assert.equal(e.complete(tile.id, 86400000 + i), false);
+  }
+  assert.equal(e.score, 20); assert.equal(e.points, 0);
+});
+
+test('Zen retains completed poses then replaces them without an empty slot, even across pause', () => {
+  const e = make({zen: true}); const tile = e.start(0).tiles[0];
+  e.complete(tile.id, 500, 720);
+  assert.equal(e.tick(1000).tiles[0].id, tile.id);
+  e.pause(1000); e.resume(9000);
+  const before = e.tick(9219); assert.equal(before.tiles[0].id, tile.id);
+  assert.equal(before.tiles[0].releaseInMs, 1); assert.equal(before.tiles[0].deadline, null);
+  const after = e.tick(9220); assert.notEqual(after.tiles[0].id, tile.id);
+  assert.equal(after.tiles[0].ageMs, 0); assert.equal(populated(after).length, 8);
+  assert.equal(after.score, 1);
+  e.zen = false; const normal = e.start(10000);
+  assert.equal(populated(normal).length, 1); assert.equal(normal.score, 0);
+  assert.equal(normal.tiles.find(Boolean).remainingMs, 25000);
+});
+
+test('Zen respects availability and can refill when a type unlocks', () => {
+  let unlocked = false;
+  const e = make({zen: true, types: ['one'], isTypeAvailable: () => unlocked});
+  assert.equal(populated(e.start(0)).length, 0);
+  unlocked = true; assert.equal(populated(e.tick(100)).length, 8);
+  e.enqueueType('one'); const tile = e.tiles[0]; e.complete(tile.id, 200);
+  assert.equal(e.tiles[0].type, 'one'); assert.equal(populated(e.snapshot(200)).length, 8);
+});
+
 test('scoring rewards the selected timing, uses actual expiry, and never pays twice', () => {
   for (const lifetime of [15000,25000,30000]) for (const mode of ['fast','late']) {
     const e = make({types:['one'], tileLifetimeMs:lifetime, spawnIntervalMs:lifetime*2, scoringMode:mode});
