@@ -1,6 +1,6 @@
 # Little Rush
 
-A mobile-first 2D micro-game collection with 29 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.8.0 adds bubble shooting, match-three, bouncing pegs, a telescope search, a dice board and mini golf. Zen now has only one cocoon per run. No libraries, external assets, account or network connection are required to play.
+A mobile-first 2D micro-game collection with 29 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.9.0 adds direct drag aiming, varied arcade layouts, a larger telescope and a dice puzzle with four fixed choices. Zen has only one cocoon per run. No libraries, external assets, account or network connection are required to play.
 
 ## Play
 
@@ -95,12 +95,12 @@ Tile colors identify five consistent categories:
 | TAP LOW TO HIGH | Tap the dice in ascending dot-count order. |
 | MATCH | Tap anywhere in the tile when both the scrolling color and shape match the reference. A miss has a 750ms cooldown while scrolling continues. |
 | TAP TARGETS | Press Start. Six circles spawn at 500ms intervals over three seconds, each fading and scaling in for 500ms. Tap each within its next 500ms or the tile resets for another attempt. |
-| POP SIX | Hold the arrows to aim, then shoot from below. Connect three same-color bubbles; clear six in total. Shots rebound off side walls. A crowded rack refreshes for another try. |
+| POP SIX | Tap or drag anywhere in the field to aim, then press Shoot. Connect three same-color balls; clear six in total. Random racks have varied colors and silhouettes, with an exposed matching pair. Shots rebound off side walls. Arrow keys aim and Space shoots. |
 | MAKE THREE | Tap two neighboring shapes or swipe one to swap. Make a horizontal or vertical line of three. Invalid swaps return; every board has a solution. |
-| HIT THREE PEGS | Hold arrows to aim from above, then shoot. The ball falls and rebounds; hit all three marked gold pegs across as many shots as needed. |
-| FIND THE PLANET | Drag the telescope sky, or use arrow keys. Center the planet pictured in the reference badge for 400ms to lock on. |
-| LAND ON THE GIFT | Choose one of two visible dice to move that many spaces. Land exactly on the gift; overshooting sends the pawn back to the start. Dice refresh after each move, with a valid finish always available nearby. |
-| PUTT IT IN | Drag back from the ball to aim and set power, then release. Bounce off the edges and avoid the round bumper. Keep putting until the ball drops into the cup. Arrow keys adjust aim/power; Space shoots. |
+| HIT THREE PEGS | Tap or drag to aim from above, then press Shoot. The ball falls and rebounds; hit all three marked gold pegs across as many shots as needed. Each field randomizes the peg positions and count with safe gaps. Arrow keys aim and Space shoots. |
+| FIND THE PLANET | Drag the enlarged sky view, or use arrow keys. Center the planet matching the large, unboxed reference for 400ms to lock on. A ring indicates progress without extra text. |
+| LAND ON THE GIFT | Choose from four fixed dice, using each at most once. Reach a gift 6–12 spaces away, depending on the randomized path. At least one combination lands exactly. Overshooting restores the same four dice and sends the pawn back to the start; no new dice appear between moves. |
+| PUTT IT IN | Drag back from the ball to aim and set power, then release. Courses vary the start, cup, turf, and round or rectangular obstacles. The start and cup are at least 90 game units apart. Keep putting until the ball drops into the cup. Arrow keys adjust aim/power; Space shoots. |
 | FEED BUTTERFLY | Drag nectar across the board to the unlocked butterfly. |
 
 Select **Let's play** on the title screen to start a run. The play screen gives most of the portrait viewport to its eight square tiles. The compact header, six-pixel tile padding and larger controls accommodate both touch and mouse input; keyboard alternatives are also available for the supported interactions.
@@ -123,7 +123,7 @@ Add a pack with `LittleRushGames.register(catalogEntries, mountFunction)`. Each 
 
 ## Verification
 
-Run `npm test` / `node --test tests/*.test.cjs`. Tests cover all 29 games, 2.5-second spawns, 25-second deadline boundaries, full-board handling, queue/unlock logic, pointer ownership, cooldowns, upload states, pause/restart/expiry cleanup, and the integrated hatch-to-feed lifecycle. Solvers verify generated puzzles across many seeds, including 500 match-three boards and every peg layout. Golf completion is checked at 30, 60 and 120fps. DOM test doubles verify logic; browser checks verify rendered layout and real pointer behavior.
+Run `npm test` / `node --test tests/*.test.cjs`. Tests cover all 29 games, 2.5-second spawns, 25-second deadline boundaries, full-board handling, queue/unlock logic, pointer ownership, cooldowns, upload states, pause/restart/expiry cleanup, and the integrated hatch-to-feed lifecycle. Generated layouts are checked across hundreds of seeds: solvable match-three and fixed-dice boards, connected bubble racks, separated pegs, and traversable golf courses. Shot solvers exercise randomized peg fields and golf completion at 30, 60 and 120fps. DOM test doubles verify logic; browser checks verify rendered layout and real pointer behavior.
 
 The browser QA checklist includes the hatch-to-butterfly-to-nectar sequence, shape drops, wire cuts, bounded switch knobs, slider and claw drags, ignored track taps, upload progression, generated maze routes and blocked wall shortcuts, pipe solutions, geode reveal, math cooldown, compact tile layouts, portrait phone sizes, records, and persistent Tweaks selections. Check both Styles choices, saved theme restoration, Holofoil's reduced-motion behavior and its WebGL fallback. Also check loading and starting with every asset served under a `/Little-rush/` path. No physical iOS/Android device testing has been performed.
 
