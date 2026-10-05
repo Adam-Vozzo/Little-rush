@@ -94,9 +94,9 @@ function game(type, options = {}) {
 }
 function setAngle(g, angle) {
   const isPegs = !!g.container.querySelector('.mg-pegs');
-  const current = Number(g.one('.arc-barrel').getAttribute('transform').match(/rotate\(([-\d.]+)/)[1]) * (isPegs ? -1 : 1);
-  const amount = Math.round(angle - current), key = g.label(amount < 0 ? 'Aim left' : 'Aim right');
-  for (let i = 0; i < Math.abs(amount); i++) key.click({detail: 0});
+  const field = g.one('.arc-scene'); field.rect = {left: 0, top: 0, width: 200, height: 150};
+  const a = angle * Math.PI / 180, target = {clientX: 100 + Math.sin(a) * 80, clientY: (isPegs ? 5 : 138) + Math.cos(a) * 80 * (isPegs ? 1 : -1)};
+  field.dispatch('pointerdown', target); field.dispatch('pointerup', target);
 }
 test('all six games register, mount in demo without reacting, and clean up', () => {
   assert.equal(catalog.length, 6); assert.equal(new Set(catalog.map(item => item.id)).size, 6);
@@ -135,20 +135,81 @@ test('jewel swipes own one pointer and canceled drags never swap', () => {
   pieces[a].dispatch('pointerup', {clientX: 20 + (b % 4 - a % 4) * 30, clientY: 20 + (Math.floor(b / 4) - Math.floor(a / 4)) * 30});
   pieces[a].click(); g.advance(200); assert.equal(g.completions, 1);
 });
-test('held aiming responds on the first frame, pauses cleanly and keeps short taps small', () => {
+test('drag aiming responds immediately, owns one pointer, and cancels safely without firing', () => {
   for (const type of ['bubbles', 'pegs']) {
-    const g = game(type), arrow = g.label('Aim right'), angle = () => Math.abs(Number(g.one('.arc-barrel').getAttribute('transform').match(/rotate\(([-\d.]+)/)[1]));
-    arrow.dispatch('pointerdown'); g.advance(16); assert.ok(angle() > 0 && angle() < 2);
-    g.advance(300); assert.ok(angle() > 19); arrow.dispatch('pointerup'); const end = angle(); g.advance(500); assert.equal(angle(), end);
-    arrow.dispatch('pointerdown'); g.suspend(); g.advance(500); assert.equal(angle(), end); assert.equal(arrow.pointerId, null);
-    arrow.dispatch('pointerdown'); arrow.dispatch('pointerup'); assert.equal(angle(), end + 1);
-    g.destroy(); arrow.dispatch('pointerdown'); assert.equal(arrow.pointerId, null);
+    const g = game(type), field = g.one('.arc-scene'), angle = () => Number(field.getAttribute('aria-valuenow'));
+    assert.equal(g.all('button').length, 1); field.rect = {left: 0, top: 0, width: 200, height: 150};
+    field.dispatch('pointerdown', {pointerId: 7, clientX: 130, clientY: 75}); assert.ok(angle() > 0);
+    const initial = angle(); field.dispatch('pointermove', {pointerId: 8, clientX: 30, clientY: 75}); assert.equal(angle(), initial);
+    field.dispatch('pointermove', {pointerId: 7, clientX: 70, clientY: 75}); assert.ok(angle() < 0);
+    g.suspend(); assert.equal(angle(), 0); assert.equal(field.pointerId, null); assert.equal(g.feedback.length, 0);
+    setAngle(g, 30); assert.equal(angle(), 30); g.advance(500); assert.equal(angle(), 30); assert.equal(g.feedback.length, 0);
+    field.dispatch('keydown', {key: 'ArrowLeft'}); assert.equal(angle(), 28);
+    g.label('Shoot ball').click(); assert.equal(g.label('Shoot ball').disabled, true); setAngle(g, -20); assert.equal(angle(), 28);
+    g.destroy(); field.dispatch('pointerdown'); assert.equal(field.pointerId, null);
   }
 });
 test('bubble clusters respect color and adjacency', () => {
   const balls = [{x: 20, y: 20, color: 0}, {x: 44, y: 20, color: 0}, {x: 32, y: 41, color: 0}, {x: 68, y: 20, color: 1}, {x: 180, y: 100, color: 0}];
   assert.equal(rules.bubbleCluster(balls, balls[0]).length, 3);
   assert.equal(rules.bubbleCluster(balls, balls[0], false).length, 4);
+});
+test('random bubble racks vary in silhouette and color while staying attached with a matchable pair', () => {
+  const shapes = new Set(), colors = new Set();
+  for(let seed=1;seed<=300;seed++) {
+    const balls=rules.generateBubbles(seeded(seed));
+    shapes.add(balls.map(b=>`${b.row},${b.col}`).join(';')); colors.add(balls.map(b=>b.color).join());
+    assert.ok(balls.length>=6); assert.ok(balls.every(b=>b.y<95));
+    const attached=new Set(); balls.filter(b=>b.row===0).forEach(b=>rules.bubbleCluster(balls,b,false).forEach(p=>attached.add(p)));
+    assert.equal(attached.size,balls.length);
+    const bottom=[...balls].sort((a,b)=>b.y-a.y)[0]; assert.ok(rules.bubbleCluster(balls,bottom).length>=2);
+  }
+  assert.ok(shapes.size>250); assert.ok(colors.size>250);
+});
+test('random peg fields vary their positions and counts with three distinct marked targets', () => {
+  const layouts=new Set(), counts=new Set();
+  for(let seed=1;seed<=300;seed++) {
+    const pegs=rules.generatePegs(seeded(seed * 65537)); layouts.add(pegs.map(p=>`${p.x},${p.y}`).join()); counts.add(pegs.length);
+    assert.equal(pegs.filter(p=>p.marked).length,3); assert.ok(pegs.length>=7&&pegs.length<=10);
+    pegs.forEach((peg,i)=>{ assert.ok(peg.x>=25&&peg.x<=175&&peg.y>=40&&peg.y<=126); pegs.slice(i+1).forEach(other=>assert.ok(Math.hypot(peg.x-other.x,peg.y-other.y)>=peg.r+other.r+12)); });
+  }
+  assert.equal(layouts.size,300); assert.ok(counts.size>=3);
+  for(const value of [0,.5,.999]) assert.equal(rules.generatePegs(()=>value).filter(p=>p.marked).length,3);
+});
+test('random board lengths have an exact solution using the four fixed dice once each', () => {
+  const lengths=new Set();
+  for(let seed=1;seed<=500;seed++) {
+    const {values,goal,path}=rules.generateBoard(seeded(seed)); lengths.add(goal);
+    assert.equal(values.length,4); assert.equal(new Set(values).size,4); assert.equal(path.length,goal+1);
+    assert.ok(goal>=6&&goal<=12);
+    assert.ok(Array.from({length:15},(_,i)=>i+1).some(mask=>values.reduce((sum,n,i)=>sum+(mask & 1<<i ? n : 0),0)===goal));
+  }
+  assert.equal(lengths.size,7);
+});
+test('golf courses vary starts, holes, obstacles and turf, with safe gaps and a traversable route', () => {
+  const starts=new Set(), holes=new Set(), obstacleKinds=new Set(), turf=new Set();
+  for(let seed=1;seed<=200;seed++) {
+    const course=rules.generateGolf(seeded(seed * 65537)), {start,hole,obstacles}=course;
+    starts.add(`${start.x},${start.y}`); holes.add(`${hole.x},${hole.y}`); turf.add(course.turf);
+    assert.ok(Math.hypot(start.x-hole.x,start.y-hole.y)>=90);
+    obstacles.forEach(o=>{obstacleKinds.add(o.kind);assert.ok(rules.obstacleDistance(start,o)>=23);assert.ok(rules.obstacleDistance(hole,o)>=25);});
+    // Independent clearance grid: the golf ball must fit from start to cup.
+    const cols=37, rows=27, free=(x,y)=>!obstacles.some(o=>o.kind==='wall'
+      ? Math.hypot(Math.max(Math.abs(x-o.x)-o.w/2,0),Math.max(Math.abs(y-o.y)-o.h/2,0))<6
+      : Math.hypot(x-o.x,y-o.y)<o.r+6);
+    const index=p=>Math.round((p.y-10)/5)*cols+Math.round((p.x-10)/5), end=index(hole), seen=new Set([index(start)]), queue=[index(start)];
+    for(let i=0;i<queue.length&&!seen.has(end);i++) {
+      const at=queue[i], x=at%cols,y=Math.floor(at/cols);
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {const nx=x+dx,ny=y+dy,next=ny*cols+nx;if(nx<0||nx>=cols||ny<0||ny>=rows||seen.has(next)||!free(10+nx*5,10+ny*5))continue;seen.add(next);queue.push(next);}
+    }
+    assert.ok(seen.has(end),`Blocked course ${seed}`);
+  }
+  assert.equal(starts.size,200); assert.ok(holes.size>180); assert.equal(obstacleKinds.size,2); assert.equal(turf.size,3);
+});
+test('rectangular golf obstacles rebound a ball without letting it pass through', () => {
+  const ball={x:80,y:70,vx:300,vy:0};
+  rules.advanceBall(ball,.1,{radius:5,obstacles:[{kind:'wall',x:100,y:70,w:12,h:35}]});
+  assert.ok(ball.vx<0); assert.ok(ball.x<94);
 });
 test('bubble shots clear a connected group, count progress, and complete once after six', () => {
   const g = game('bubbles');
@@ -159,7 +220,7 @@ test('bubble shots clear a connected group, count progress, and complete once af
     const target = targets[0]; setAngle(g, Math.atan2(target.x - 100, 126 - target.y) * 180 / Math.PI);
     g.label('Shoot ball').click(); g.advance(2500);
   }
-  assert.equal(g.completions, 1); assert.equal(g.one('.arc-caption').textContent, '6 / 6 BUBBLES');
+  assert.equal(g.completions, 1); assert.equal(g.one('.arc-caption').textContent, '6 / 6');
 });
 test('peg shots rebound and remember marked hits between shots', () => {
   const g = game('pegs');
@@ -176,45 +237,62 @@ test('substepped physics rebounds off pegs and detects a hole without tunneling'
 });
 test('telescope drag pans freely and needs a centered target for 400ms', () => {
   const g = game('telescope'), field = g.one('.arc-scene'); field.rect = {left: 0, top: 0, width: 200, height: 150};
+  assert.equal(g.all('.arc-caption').length,0); assert.equal(field.textContent,''); assert.match(g.one('.arc-target-planet').getAttribute('transform'),/scale\(1\.2\)/);
   field.dispatch('pointerdown', {pointerId: 7, clientX: 100, clientY: 77});
   field.dispatch('pointermove', {pointerId: 8, clientX: 230, clientY: 161}); g.advance(500); assert.equal(g.completions, 0);
   field.dispatch('pointermove', {pointerId: 7, clientX: 230, clientY: 161}); field.dispatch('pointerup', {pointerId: 7});
   g.advance(380); assert.equal(g.completions, 0); g.advance(30); assert.equal(g.completions, 1); assert.equal(field.pointerId, null);
 });
-test('board dice show the move, animate steps, reset overshoots, and allow exact landing', () => {
-  const g = game('board', {random: () => .999});
-  g.label('Move 6 spaces').click(); g.advance(1100); assert.equal(g.one('.arc-board-status').textContent, '9 TO GO');
-  g.advance(100); assert.equal(g.one('.arc-board-status').textContent, '3 TO GO');
-  g.label('Move 6 spaces').click(); g.advance(2000); assert.equal(g.completions, 0); assert.equal(g.one('.arc-board-status').textContent, '9 TO GO');
-  g.label('Move 6 spaces').click(); g.advance(1300); g.label('Move 3 spaces').click(); g.advance(1000);
+test('board consumes four fixed dice, resets the same choices on overshoot and permits exact landing', () => {
+  const random = () => .999, layout = rules.generateBoard(random), g = game('board', {random}), dice = g.all('.arc-die');
+  assert.equal(dice.length, 4); assert.equal(g.all('.arc-caption').length, 0);
+  const initialFaces = dice.map(die => die.children.map(el => el.getAttribute('cx')).join());
+  for (const value of [...layout.values].sort((a, b) => a - b)) { g.label(`Move ${value} spaces`).click(); g.advance(1300); }
+  g.advance(500); assert.equal(g.completions, 0); assert.equal(g.one('.arc-board-status').textContent, `${layout.goal} TO GO`);
+  assert.deepEqual(dice.map(die => die.children.map(el => el.getAttribute('cx')).join()), initialFaces);
+  const mask = Array.from({length:15},(_,i)=>i+1).find(mask=>layout.values.reduce((sum,n,i)=>sum+(mask & 1<<i ? n : 0),0)===layout.goal);
+  for (let i = 0; i < 4; i++) if (mask & 1 << i) { dice[i].click(); assert.equal(g.completions,0); g.advance(1300); assert.ok(dice[i].classList.contains('is-used')); }
   assert.equal(g.completions, 1); assert.equal(g.one('.arc-board-status').textContent, 'A LITTLE GIFT!');
 });
 test('golf drag cancels on pause and pointer cancellation without firing', () => {
   for (const stop of ['pointercancel', 'suspend']) {
     const g = game('golf'), field = g.one('.arc-scene'); field.rect = {left: 0, top: 0, width: 200, height: 150};
-    field.dispatch('pointerdown', {clientX: 164, clientY: 118}); field.dispatch('pointermove', {clientX: 184, clientY: 148});
+    const {start} = rules.generateGolf(() => 0);
+    field.dispatch('pointerdown', {clientX: start.x, clientY: start.y}); field.dispatch('pointermove', {clientX: start.x + 20, clientY: start.y + 30});
     if (stop === 'suspend') g.suspend(); else field.dispatch(stop);
-    g.advance(1000); assert.equal(g.one('.arc-golf-ball').getAttribute('cx'), '164'); assert.equal(g.completions, 0); assert.equal(field.pointerId, null);
+    g.advance(1000); assert.equal(g.one('.arc-golf-ball').getAttribute('cx'), String(start.x)); assert.equal(g.completions, 0); assert.equal(field.pointerId, null);
   }
 });
 test('golf pull-back releases in the opposite direction and comes to rest for another putt', () => {
   const g = game('golf'), field = g.one('.arc-scene'); field.rect = {left: 0, top: 0, width: 200, height: 150};
-  field.dispatch('pointerdown', {clientX: 164, clientY: 118}); field.dispatch('pointerup', {clientX: 179, clientY: 118}); g.advance(100);
-  assert.ok(Number(g.one('.arc-golf-ball').getAttribute('cx')) < 164); g.advance(5000); assert.equal(g.one('.arc-caption').textContent, 'PULL BACK · RELEASE');
+  const {start} = rules.generateGolf(() => 0);
+  field.dispatch('pointerdown', {clientX: start.x, clientY: start.y}); field.dispatch('pointerup', {clientX: start.x - 15, clientY: start.y}); g.advance(100);
+  assert.ok(Number(g.one('.arc-golf-ball').getAttribute('cx')) > start.x); g.advance(5000); assert.equal(g.one('.arc-caption').textContent, 'PULL BACK · RELEASE');
 });
-test('golf can go around the bumper and sink the ball, retaining the finished state', () => {
+test('golf can complete a generated course and retain the finished state at different frame rates', () => {
   for (const frame of [1000 / 30, 1000 / 60, 1000 / 120]) {
     const g = game('golf'), field = g.one('.arc-scene'); field.rect = {left: 0, top: 0, width: 200, height: 150};
-    field.dispatch('pointerdown', {clientX: 164, clientY: 118}); field.dispatch('pointerup', {clientX: 164, clientY: 145}); g.advance(4000, frame);
-    const y = Number(g.one('.arc-golf-ball').getAttribute('cy'));
-    field.dispatch('pointerdown', {clientX: 164, clientY: y}); field.dispatch('pointerup', {clientX: 202, clientY: y}); g.advance(4000, frame);
+    const {start,hole,obstacles} = rules.generateGolf(() => 0);
+    let current = start;
+    for(let shot=0;shot<4&&!g.completions;shot++) {
+      let best = null;
+      for(let angle=-180;angle<180;angle+=4) for(let power=10;power<=60;power+=2) {
+        const a=angle*Math.PI/180,ball={...current,vx:Math.cos(a)*power*4.5,vy:Math.sin(a)*power*4.5}; let sunk=false;
+        for(let t=0;t<4&&Math.hypot(ball.vx,ball.vy)>=6;t+=1/60) if(rules.advanceBall(ball,1/60,{friction:1.35,radius:5,top:4,bottom:146,left:4,right:196,bounce:.7,obstacles,hole})){sunk=true;break;}
+        const error=sunk ? -1 : Math.hypot(ball.x-hole.x,ball.y-hole.y);
+        if(!best||error<best.error)best={error,dx:Math.cos(a)*power,dy:Math.sin(a)*power};
+        if(sunk)break;
+      }
+      field.dispatch('pointerdown',{clientX:current.x,clientY:current.y}); field.dispatch('pointerup',{clientX:current.x-best.dx,clientY:current.y-best.dy}); g.advance(4500,frame);
+      current={x:Number(g.one('.arc-golf-ball').getAttribute('cx')),y:Number(g.one('.arc-golf-ball').getAttribute('cy'))};
+    }
     assert.equal(g.completions, 1); assert.equal(g.one('.arc-caption').textContent, 'IN THE CUP!'); assert.ok(g.one('.arc-golf-ball').classList.contains('is-sunk'));
   }
 });
-test('all six peg layouts have a solution in at most three well-aimed shots', () => {
-  for (const mirrorValue of [.1, .9]) for (const shiftValue of [0, .4, .9]) {
-    let randomCalls = 0; const g = game('pegs', {random: () => randomCalls++ === 0 ? mirrorValue : shiftValue});
-    for (let shot = 0; shot < 3 && !g.completions; shot++) {
+test('random peg layouts are solvable with aimed shots', () => {
+  for (let seed=1;seed<=30;seed++) {
+    const g = game('pegs', {random: seeded(seed)});
+    for (let shot = 0; shot < 6 && !g.completions; shot++) {
       const remaining = g.all('.arc-peg').filter(el => !el.classList.contains('is-hit')).map(el => {
         const [x, y] = el.getAttribute('transform').match(/[\d.]+/g).map(Number);
         return {x, y, r: Number(el.children[0].getAttribute('r')), marked: el.classList.contains('is-marked')};

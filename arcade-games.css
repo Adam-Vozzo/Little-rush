@@ -5,11 +5,13 @@
 .mg-arcade .arc-scene[tabindex] { pointer-events: auto; touch-action: none; cursor: grab; outline-offset: -2px; }
 .mg-arcade .arc-scene[tabindex]:active { cursor: grabbing; }
 .arc-caption { width: 100%; flex: 0 0 auto; min-height: 10px; text-align: center; font-size: clamp(6px, 4.1cqw, 9px); font-weight: 650; letter-spacing: .045em; line-height: 1.3; color: #506952; pointer-events: none; }
-.arc-controls { display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 5px; width: 100%; flex: 0 0 clamp(27px, 20cqw, 40px); }
+.arc-controls { display: flex; justify-content: center; width: 100%; flex: 0 0 clamp(27px, 20cqw, 40px); }
+.arc-controls .arc-fire { width: 65%; }
 .mg .arc-controls button { background: #fffaf0d9; border: 1px solid #68816c28; border-radius: 9px; box-shadow: 0 2px 0 #526e4921; transition: background .1s, box-shadow .1s, opacity .15s; }
 .mg .arc-controls button:active, .mg .arc-controls button.is-held { background: #fafdf0; box-shadow: inset 0 1px 3px #526e492b; transform: none; }
 .mg .arc-controls button:disabled { opacity: .45; }
-.arc-arrow { font-size: clamp(17px, 13cqw, 25px) !important; line-height: 1; }
+.mg-bubbles .arc-scene, .mg-pegs .arc-scene { cursor: crosshair; }
+.mg-bubbles .arc-scene.is-aiming, .mg-pegs .arc-scene.is-aiming { cursor: crosshair; }
 .arc-fire { font-size: clamp(9px, 6.7cqw, 13px) !important; font-weight: 650 !important; letter-spacing: .04em; }
 .arc-guide { fill: none; stroke: #587568; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 1 8; opacity: .5; }
 .arc-barrel { fill: none; stroke: #53796c; stroke-width: 10; stroke-linecap: round; }
@@ -28,10 +30,11 @@
 .arc-peg circle { fill: #8da6aa; stroke: #fbf8ee; stroke-width: 1.5; }
 .arc-peg.is-marked circle { fill: #da9a3c; stroke: #fff3bb; stroke-width: 2.5; filter: drop-shadow(0 1px 1px #aa752e30); }
 .arc-peg.is-hit { opacity: .13; transition: opacity .28s; }
-.arc-svg-label { font: 600 7px system-ui, sans-serif; fill: #52706c; letter-spacing: .7px; }
+.arc-target-planet { filter: drop-shadow(0 2px 3px #101f32b3); }
 .arc-board-status { font: 650 10px system-ui, sans-serif; fill: #52725e; letter-spacing: .3px; }
-.arc-board-dice { display: flex; justify-content: center; gap: 12px; width: 100%; height: clamp(27px, 21cqw, 41px); flex: 0 0 clamp(27px, 21cqw, 41px); }
-.mg .arc-die { width: clamp(27px, 21cqw, 41px); height: clamp(27px, 21cqw, 41px); flex: 0 0 auto; border: 1px solid #a6b497; border-radius: 7px; background: #fffaf0; box-shadow: 0 2px 0 #b3bfa5; }
+.arc-board-dice { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 5px; width: 100%; height: clamp(25px, 21cqw, 41px); flex: 0 0 clamp(25px, 21cqw, 41px); }
+.mg .arc-die { width: 100%; height: 100%; min-width: 0; border: 1px solid #a6b497; border-radius: 7px; background: #fffaf0; box-shadow: 0 2px 0 #b3bfa5; transition: opacity .18s; }
+.mg .arc-die.is-used { opacity: .2; box-shadow: none; }
 .arc-die svg { padding: 2px; }
 .arc-die.is-rolling { animation: arc-die-toss .23s ease-out; }
 @keyframes arc-die-toss { 30% { translate: 0 -3px; rotate: -12deg; } 70% { rotate: 8deg; } }

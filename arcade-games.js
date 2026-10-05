@@ -66,6 +66,75 @@
     }
     return found;
   }
+  const shuffle = (values, random) => { const result = [...values]; for (let i = result.length - 1; i > 0; i--) { const j = integer(random, i + 1); [result[i], result[j]] = [result[j], result[i]]; } return result; };
+  function generateBubbles(random = Math.random) {
+    const balls = [], start = integer(random, 2), end = 6 - integer(random, 2);
+    for (let row = 0; row < 4; row++) for (let col = start; col <= end; col++) {
+      const p = bubblePoint(row, col), neighbors = balls.filter(ball => bubbleNeighbors(ball, p));
+      if (row && (!neighbors.some(ball => ball.row === row - 1) || random() > [1, .93, .73, .35][row])) continue;
+      const color = neighbors.length && random() < .57 ? neighbors[integer(random, neighbors.length)].color : integer(random, 4);
+      balls.push({...p, row, col, color});
+    }
+    // Every rack has an exposed pair to aim at, without repeating striped columns.
+    const bottom = [...balls].sort((a, b) => b.y - a.y)[0];
+    const partner = balls.find(ball => ball !== bottom && bubbleNeighbors(ball, bottom));
+    if (partner) partner.color = bottom.color;
+    return balls;
+  }
+  function generatePegs(random = Math.random) {
+    const pegs = [], count = 7 + integer(random, 4);
+    const add = (x, y) => {
+      const marked = pegs.length < 3, r = marked ? 8 : 5 + integer(random, 2), candidate = {x, y, r, marked, hit: false};
+      if (pegs.some(peg => distance(peg, candidate) < peg.r + r + 12)) return false;
+      pegs.push(candidate); return true;
+    };
+    for (let attempt = 0; attempt < 250 && pegs.length < count; attempt++) {
+      const y = 40 + random() * 86, spread = Math.min(74, (y - 5) * 1.3);
+      add(100 + (random() * 2 - 1) * spread, y);
+    }
+    // Bounded fallback for degenerate random sources; still respects all gaps.
+    for (const y of [44, 82, 121]) for (const x of [44, 82, 120, 158]) if (pegs.length < count) add(x, y);
+    return pegs;
+  }
+  function generateBoard(random = Math.random) {
+    const values = shuffle([1, 2, 3, 4, 5, 6], random).slice(0, 4), options = [];
+    for (let mask = 1; mask < 16; mask++) {
+      const chosen = values.filter((_, i) => mask & 1 << i), total = chosen.reduce((sum, value) => sum + value, 0);
+      if (chosen.length >= 2 && chosen.length <= 3 && total >= 6 && total <= 12) options.push(total);
+    }
+    const goal = options[integer(random, options.length)];
+    const path = Array.from({length: goal + 1}, (_, i) => {
+      const along = i / goal * 390;
+      return along <= 154 ? {x: 23 + along, y: 116} : along <= 236 ? {x: 177, y: 116 - (along - 154)} : {x: 177 - (along - 236), y: 34};
+    });
+    return {values, goal, path};
+  }
+  const obstacleDistance = (p, obstacle) => obstacle.kind === 'wall'
+    ? Math.hypot(Math.max(Math.abs(p.x - obstacle.x) - obstacle.w / 2, 0), Math.max(Math.abs(p.y - obstacle.y) - obstacle.h / 2, 0))
+    : distance(p, obstacle) - obstacle.r;
+  function generateGolf(random = Math.random) {
+    const start = {x: 25 + random() * 150, y: 30 + random() * 95};
+    let hole = {x: 200 - start.x, y: 150 - start.y, r: 8};
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const candidate = {x: 25 + random() * 150, y: 30 + random() * 95, r: 8};
+      if (distance(start, candidate) >= 95) { hole = candidate; break; }
+    }
+    if (distance(start, hole) < 95) {
+      // Pick a far corner if a constant random source supplied central points.
+      hole = [{x: 22, y: 27}, {x: 178, y: 27}, {x: 22, y: 125}, {x: 178, y: 125}].sort((a, b) => distance(start, b) - distance(start, a))[0]; hole.r = 8;
+    }
+    const obstacles = [], count = 1 + integer(random, 3);
+    for (let attempt = 0; attempt < 100 && obstacles.length < count; attempt++) {
+      const kind = random() < .45 ? 'wall' : 'bumper', vertical = random() < .5;
+      const obstacle = {kind, x: 42 + random() * 116, y: 43 + random() * 65, r: 10 + random() * 7};
+      if (kind === 'wall') { obstacle.w = vertical ? 11 : 24 + random() * 18; obstacle.h = vertical ? 24 + random() * 18 : 11; }
+      if (obstacleDistance(start, obstacle) < 23 || obstacleDistance(hole, obstacle) < 25) continue;
+      const bound = kind === 'wall' ? Math.hypot(obstacle.w, obstacle.h) / 2 : obstacle.r;
+      if (obstacles.some(other => distance(obstacle, other) < bound + (other.kind === 'wall' ? Math.hypot(other.w, other.h) / 2 : other.r) + 17)) continue;
+      obstacles.push(obstacle);
+    }
+    return {start, hole, obstacles, turf: integer(random, 3)};
+  }
   // Small fixed physics steps prevent thin pegs and holes being skipped on slow frames.
   function advanceBall(ball, seconds, {gravity = 0, friction = 0, radius = 4, top = 4, bottom = Infinity, left = 0, right = 200, bounce = .82, obstacles = [], onHit = () => {}, hole = null} = {}) {
     const steps = Math.max(1, Math.ceil(seconds * 240)), dt = seconds / steps;
@@ -78,10 +147,14 @@
       if (ball.y > bottom - radius) { ball.y = bottom - radius; ball.vy = -Math.abs(ball.vy) * bounce; }
       for (const peg of obstacles) {
         if (peg.hit) continue;
-        const d = distance(ball, peg), limit = radius + peg.r;
+        let center = peg, pegRadius = peg.r;
+        if (peg.kind === 'wall') {
+          center = {x: clamp(ball.x, peg.x - peg.w / 2, peg.x + peg.w / 2), y: clamp(ball.y, peg.y - peg.h / 2, peg.y + peg.h / 2)}; pegRadius = 0;
+        }
+        const d = distance(ball, center), limit = radius + pegRadius;
         if (d >= limit) continue;
-        const nx = d > .0001 ? (ball.x - peg.x) / d : 0, ny = d > .0001 ? (ball.y - peg.y) / d : -1;
-        ball.x = peg.x + nx * (limit + .01); ball.y = peg.y + ny * (limit + .01);
+        const nx = d > .0001 ? (ball.x - center.x) / d : 0, ny = d > .0001 ? (ball.y - center.y) / d : -1;
+        ball.x = center.x + nx * (limit + .01); ball.y = center.y + ny * (limit + .01);
         const dot = ball.vx * nx + ball.vy * ny;
         if (dot < 0) { ball.vx -= (1 + bounce) * dot * nx; ball.vy -= (1 + bounce) * dot * ny; onHit(peg); }
       }
@@ -89,7 +162,7 @@
     }
     return false;
   }
-  window.LittleRushArcade = { matches, swaps, generateJewels, bubblePoint, bubbleCluster, advanceBall };
+  window.LittleRushArcade = { matches, swaps, generateJewels, bubblePoint, bubbleCluster, generateBubbles, generatePegs, generateBoard, generateGolf, obstacleDistance, advanceBall };
   let sceneSerial = 0;
 
   function mount(container, type, {demo = false, random = Math.random, onComplete = () => {}, onFeedback = () => {}} = {}) {
@@ -113,36 +186,31 @@
     };
     const caption = text => { const el = node('div', 'arc-caption', text); body.append(el); return el; };
     const point = (el, e) => { const rect = el.getBoundingClientRect(), scale = Math.min(rect.width / 200, rect.height / 150); return {x: (e.clientX - rect.left - (rect.width - 200 * scale) / 2) / scale, y: (e.clientY - rect.top - (rect.height - 150 * scale) / 2) / scale}; };
-    const heldButton = (el, direction, move, allowed) => {
-      let held = null, moved = 0;
-      const start = (pointer, key) => { if (held || !allowed()) return; held = {pointer, key}; moved = 0; el.classList.add('is-held'); };
-      const stop = (nudge = false) => { if (!held) return; if (nudge && moved < 1 && allowed()) move(direction * (1 - moved)); held = null; el.classList.remove('is-held'); release(el); };
-      listen(el, 'pointerdown', e => { if (e.button !== 0 || held || !allowed()) return; e.preventDefault(); start(e.pointerId, null); capture(el, e); });
-      listen(el, 'pointerup', e => { if (held?.pointer === e.pointerId) stop(true); });
-      for (const event of ['pointercancel', 'lostpointercapture']) listen(el, event, e => { if (held?.pointer === e.pointerId) stop(); });
-      listen(el, 'keydown', e => { if ([' ', 'Enter'].includes(e.key)) { e.preventDefault(); if (!e.repeat) start(null, e.key); } });
-      listen(el, 'keyup', e => { if (held?.key === e.key) { e.preventDefault(); stop(true); } });
-      listen(el, 'click', e => { if (e.detail === 0 && !held && allowed()) move(direction); });
-      listen(el, 'blur', () => stop()); suspenders.push(() => stop());
-      tickers.push(dt => { if (!held) return; if (!allowed()) return stop(); const amount = 65 * dt / 1000; moved += amount; move(direction * amount); });
-    };
-    const aimControls = (fire, changed, allowed) => {
-      let angle = 0;
+    const aimControls = (field, direction, fire, changed, allowed) => {
+      let angle = 0, pointer = null, original = 0;
       const controls = node('div', 'arc-controls');
-      const left = button('arc-arrow', 'Aim left', '←'), shoot = button('arc-fire', 'Shoot ball', 'SHOOT', () => { if (allowed()) { fire(angle); feedback(); } }), right = button('arc-arrow', 'Aim right', '→');
-      controls.append(left, shoot, right); body.append(controls);
-      const move = amount => { angle = clamp(angle + amount, -65, 65); changed(angle); shoot.setAttribute('aria-description', `${Math.round(angle)} degrees ${angle < 0 ? 'left' : 'right'} of center`); };
-      heldButton(left, -1, move, allowed); heldButton(right, 1, move, allowed);
-      changed(0);
-      return { update() { left.disabled = right.disabled = shoot.disabled = !allowed(); }, get angle() { return angle; } };
+      const shoot = button('arc-fire', 'Shoot ball', 'SHOOT', () => { if (allowed() && pointer === null) { fire(angle); feedback(); } });
+      controls.append(shoot); body.append(controls);
+      attr(field, {role: 'slider', 'aria-label': 'Drag to aim the ball', 'aria-valuemin': -65, 'aria-valuemax': 65, 'aria-orientation': 'horizontal'});
+      const aim = value => { angle = clamp(value, -65, 65); changed(angle); field.setAttribute('aria-valuenow', String(Math.round(angle))); field.setAttribute('aria-valuetext', `${Math.abs(Math.round(angle))} degrees ${angle < 0 ? 'left' : 'right'}`); };
+      const pointAim = e => { const p = point(field, e), dx = p.x - 100, dy = (p.y - (direction === -1 ? 138 : 5)) * direction; if (Math.hypot(dx, dy) >= 8) aim(Math.atan2(dx, Math.max(12, dy)) * 180 / Math.PI); };
+      listen(field, 'pointerdown', e => { if (pointer !== null || e.button !== 0 || !allowed()) return; e.preventDefault(); pointer = e.pointerId; original = angle; capture(field, e); pointAim(e); field.classList.add('is-aiming'); });
+      listen(field, 'pointermove', e => { if (pointer !== e.pointerId || !allowed()) return; e.preventDefault(); pointAim(e); });
+      const stop = canceled => { if (pointer === null) return; pointer = null; if (canceled) aim(original); field.classList.remove('is-aiming'); release(field); };
+      listen(field, 'pointerup', e => { if (pointer !== e.pointerId) return; if (allowed()) pointAim(e); stop(false); });
+      for (const event of ['pointercancel', 'lostpointercapture']) listen(field, event, e => { if (pointer === e.pointerId) stop(true); });
+      listen(field, 'blur', () => stop(true)); suspenders.push(() => stop(true));
+      listen(field, 'keydown', e => { if (pointer !== null || !allowed() || !['ArrowLeft', 'ArrowRight', ' ', 'Enter'].includes(e.key)) return; e.preventDefault(); if (e.key === 'ArrowLeft') aim(angle - 2); else if (e.key === 'ArrowRight') aim(angle + 2); else if (!e.repeat) { fire(angle); feedback(); } });
+      aim(0);
+      return { update() { shoot.disabled = !allowed(); field.setAttribute('aria-disabled', String(!allowed())); }, get angle() { return angle; } };
     };
 
     if (type === 'bubbles') {
-      const field = scene('Bubble shooter. Match three of a color. Clear six bubbles.');
+      const field = scene('Bubble shooter. Match three of a color. Clear six bubbles.', true);
       const layer = snode('g'), guide = snode('path', {class: 'arc-guide'}), barrel = snode('path', {d: 'M100 138V119', class: 'arc-barrel'}), loaded = snode('circle', {cx: 100, cy: 137, r: 10, class: 'arc-bubble'}), projectile = snode('circle', {r: 10, class: 'arc-bubble', visibility: 'hidden'});
       field.append(guide, layer, barrel, loaded, projectile);
       let balls = [], shot = null, readyAt = 0, cleared = 0, color = 0, misses = 0, angle = 0;
-      const status = caption('0 / 6 BUBBLES');
+      const status = caption('0 / 6');
       const paintAim = value => {
         angle = value; barrel.setAttribute('transform', `rotate(${angle} 100 138)`);
         let x = 100 + Math.sin(radians(angle)) * 18, y = 138 - Math.cos(radians(angle)) * 18, vx = Math.sin(radians(angle)) * 5, vy = -Math.cos(radians(angle)) * 5;
@@ -160,8 +228,7 @@
       };
       const resetRack = () => {
         balls.forEach(ball => ball.el.remove()); balls = [];
-        const offset = integer(random, 4);
-        for (let row = 0; row < 3; row++) for (let col = 0; col < 7; col++) balls.push(makeBall(row, col, (Math.floor(col / 2) + offset) % 4));
+        balls = generateBubbles(random).map(ball => makeBall(ball.row, ball.col, ball.color));
         misses = 0; load();
       };
       const settle = () => {
@@ -182,12 +249,12 @@
           remaining.filter(ball => !attached.has(ball)).forEach(ball => popped.add(ball));
           cleared += popped.size; feedback(); misses = 0;
           popped.forEach(ball => { ball.el.classList.add('is-popped'); ball.removeAt = age + 340; });
-          status.textContent = `${Math.min(6, cleared)} / 6 BUBBLES`; hint.textContent = `${Math.min(6, cleared)} of six bubbles cleared`;
+          status.textContent = `${Math.min(6, cleared)} / 6`; hint.textContent = `${Math.min(6, cleared)} of six bubbles cleared`;
         } else { misses++; hint.textContent = 'Aim for two or more bubbles of the same color'; }
         shot = null; readyAt = age + 380; projectile.setAttribute('visibility', 'hidden');
         if (cleared >= 6) finish();
       };
-      const controls = aimControls(value => {
+      const controls = aimControls(field, -1, value => {
         shot = {x: 100 + Math.sin(radians(value)) * 18, y: 138 - Math.cos(radians(value)) * 18, vx: Math.sin(radians(value)) * 220, vy: -Math.cos(radians(value)) * 220};
         attr(projectile, {visibility: 'visible', fill: colors[color], cx: shot.x, cy: shot.y}); loaded.setAttribute('visibility', 'hidden'); guide.setAttribute('visibility', 'hidden'); controls.update();
       }, paintAim, () => !shot && age >= readyAt);
@@ -208,7 +275,7 @@
         }
         controls.update();
       });
-      hint.textContent = 'Hold arrows to aim, then shoot. Match three to clear six bubbles.';
+      hint.textContent = 'Tap or drag to aim, then press Shoot. Match three to clear six. Arrow keys aim; Space shoots.';
     } else if (type === 'jewels') {
       let cells = generateJewels(random), selected = null, pending = null, pointer = null, ignoreClick = false;
       const grid = node('div', 'arc-jewels'); grid.setAttribute('role', 'group'); grid.setAttribute('aria-label', 'Swap neighboring shapes to make three in a row');
@@ -252,15 +319,14 @@
       });
       paint(); hint.textContent = 'Tap two neighboring shapes, or swipe one, to make three in a row.';
     } else if (type === 'pegs') {
-      const field = scene('Aim from the top. Hit all three marked gold pegs over as many shots as needed.');
-      const mirror = random() < .5, shift = integer(random, 3) * 4;
-      const pegs = [[48, 48, true], [137, 77, true], [72, 115, true], [90, 58, false], [168, 42, false], [31, 99, false], [170, 112, false]].map(([x, y, marked]) => ({x: mirror ? 200 - x : x, y: y - shift, r: marked ? 8 : 6, marked, hit: false}));
+      const field = scene('Aim from the top. Hit all three marked gold pegs over as many shots as needed.', true);
+      const pegs = generatePegs(random);
       const guide = snode('path', {class: 'arc-guide'}), barrel = snode('path', {d: 'M100 5V23', class: 'arc-barrel'}), projectile = snode('circle', {r: 4.5, fill: '#fffaf0', stroke: '#4c6054', 'stroke-width': 1.5, visibility: 'hidden'});
       field.append(guide, barrel);
       pegs.forEach(peg => { peg.el = snode('g', {class: `arc-peg${peg.marked ? ' is-marked' : ''}`, transform: `translate(${peg.x} ${peg.y})`}); peg.el.append(snode('circle', {r: peg.r})); if (peg.marked) peg.el.append(snode('path', {d: 'M-3 0H3M0-3V3', stroke: '#fffaf0', 'stroke-width': 2, 'stroke-linecap': 'round'})); field.append(peg.el); });
       field.append(projectile); const status = caption('0 / 3 GOLD PEGS');
       let ball = null, hits = 0, readyAt = 0, flight = 0;
-      const controls = aimControls(value => {
+      const controls = aimControls(field, 1, value => {
         ball = {x: 100 + Math.sin(radians(value)) * 18, y: 5 + Math.cos(radians(value)) * 18, vx: Math.sin(radians(value)) * 165, vy: Math.cos(radians(value)) * 165}; flight = 0;
         attr(projectile, {cx: ball.x, cy: ball.y, visibility: 'visible'}); guide.setAttribute('visibility', 'hidden'); controls.update();
       }, angle => {
@@ -278,11 +344,10 @@
         } else if (age >= readyAt) guide.setAttribute('visibility', 'visible');
         controls.update();
       });
-      hint.textContent = 'Hold arrows to aim. Shoot and rebound off all three gold pegs. Hits carry over.';
+      hint.textContent = 'Tap or drag to aim, then press Shoot. Hit the three gold pegs. Arrow keys aim; Space shoots.';
     } else if (type === 'telescope') {
       const field = scene('Telescope. Drag the sky or use arrow keys to center the target planet in the crosshair.', true), id = `arc-scope-${++sceneSerial}`;
-      const defs = snode('defs'), clip = snode('clipPath', {id}); clip.append(snode('circle', {cx: 100, cy: 77, r: 65})); defs.append(clip); field.append(defs);
-      field.append(snode('circle', {cx: 100, cy: 77, r: 68, fill: '#f5edcf', stroke: '#637982', 'stroke-width': 2}));
+      const defs = snode('defs'), clip = snode('clipPath', {id}); clip.append(snode('rect', {x: 2, y: 2, width: 196, height: 146, rx: 18})); defs.append(clip); field.append(defs);
       const viewport = snode('g', {'clip-path': `url(#${id})`}), sky = snode('g'); viewport.append(snode('rect', {width: 200, height: 150, fill: '#27394e'}), sky); field.append(viewport);
       for (let i = 0; i < 65; i++) sky.append(snode('circle', {cx: 15 + (i * 73 % 390), cy: 12 + (i * 113 % 295), r: i % 5 === 0 ? 1.4 : .7, fill: '#e7f1ef', opacity: .25 + (i % 4) * .15}));
       const planets = [{x: 80, y: 76}, {x: 337, y: 86}, {x: 93, y: 252}, {x: 324, y: 245}];
@@ -296,10 +361,9 @@
         return group;
       };
       planets.forEach((planet, i) => sky.append(planetGraphic((i + offset) % 4, planet.x, planet.y)));
-      field.append(snode('rect', {x: 2, y: 0, width: 42, height: 44, rx: 9, fill: '#fffaf0', stroke: '#a6b6b5', 'stroke-width': 1}), snode('text', {x: 23, y: 10, 'text-anchor': 'middle', class: 'arc-svg-label'}, 'FIND'), planetGraphic((target + offset) % 4, 23, 29, .65));
+      const reference = planetGraphic((target + offset) % 4, 30, 28, 1.2); reference.setAttribute('class', 'arc-target-planet'); field.append(reference);
       const cross = snode('circle', {cx: 100, cy: 77, r: 18, fill: 'none', stroke: '#dceadc', 'stroke-width': 1, 'stroke-dasharray': '3 4'}), lock = snode('circle', {cx: 100, cy: 77, r: 22, fill: 'none', stroke: '#b9dea7', 'stroke-width': 3, 'stroke-dasharray': '0 139', transform: 'rotate(-90 100 77)'});
       field.append(cross, lock, snode('path', {d: 'M100 50V55M100 99V104M73 77H78M122 77H127', stroke: '#e4ead8', 'stroke-width': 1}));
-      const label = caption('DRAG THE SKY');
       let camera = {x: 210, y: 160}, pointer = null, locked = 0;
       const paint = () => { sky.setAttribute('transform', `translate(${100 - camera.x} ${77 - camera.y})`); field.setAttribute('aria-description', `View ${Math.round(camera.x)}, ${Math.round(camera.y)}. Target ${['coral', 'blue', 'ringed gold', 'green'][(target + offset) % 4]} planet.`); };
       listen(field, 'pointerdown', e => { if (pointer || e.button !== 0) return; e.preventDefault(); pointer = {id: e.pointerId, at: point(field, e), camera: {...camera}}; capture(field, e); });
@@ -308,51 +372,55 @@
       for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) listen(field, event, e => { if (pointer?.id === e.pointerId) cancel(); });
       suspenders.push(cancel);
       listen(field, 'keydown', e => { const d = {ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -12], ArrowDown: [0, 12]}[e.key]; if (!d) return; e.preventDefault(); camera.x = clamp(camera.x + d[0], 65, 355); camera.y = clamp(camera.y + d[1], 65, 255); paint(); });
-      tickers.push(dt => { const found = distance(camera, planets[target]) < 14; locked = found ? locked + dt : 0; label.textContent = found ? 'HOLD IT THERE…' : 'DRAG THE SKY'; lock.setAttribute('stroke-dasharray', `${Math.min(1, locked / 400) * 139} 139`); if (locked >= 400) { label.textContent = 'PLANET FOUND'; hint.textContent = 'Target planet found'; finish(); } });
+      tickers.push(dt => { const found = distance(camera, planets[target]) < 14; locked = found ? locked + dt : 0; lock.setAttribute('stroke-dasharray', `${Math.min(1, locked / 400) * 139} 139`); if (locked >= 400) { hint.textContent = 'Target planet found'; finish(); } });
       paint(); hint.textContent = 'Find the pictured planet, then hold it in the center of the telescope.';
     } else if (type === 'board') {
       const field = scene('A winding board path. Choose a die to land exactly on the gift. Going past it returns to the start.');
-      const path = [{x: 23, y: 112}, {x: 61, y: 112}, {x: 99, y: 111}, {x: 137, y: 108}, {x: 176, y: 97}, {x: 177, y: 60}, {x: 149, y: 31}, {x: 108, y: 28}, {x: 66, y: 28}, {x: 24, y: 31}];
+      const {path, goal, values} = generateBoard(random), used = new Set();
       field.append(snode('path', {d: path.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' '), fill: 'none', stroke: '#91a386', 'stroke-width': 31, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'}));
-      path.forEach((p, i) => { field.append(snode('rect', {x: p.x - 14, y: p.y - 14, width: 28, height: 28, rx: 5, fill: i === 9 ? '#efd282' : i % 2 ? '#e7ead8' : '#f9f5df', stroke: '#798d72', 'stroke-width': 1})); if (i > 0 && i < 9) field.append(snode('circle', {cx: p.x, cy: p.y, r: 2, fill: '#93a48a'})); });
-      const reward = snode('g', {class: 'arc-reward', transform: 'translate(24 31)'}); reward.append(snode('rect', {x: -8, y: -5, width: 16, height: 13, rx: 2, fill: '#c87369'}), snode('path', {d: 'M0-5V8M-9-5H9M0-6C-14-15-5-18 0-6C14-15 5-18 0-6', fill: 'none', stroke: '#fff0c0', 'stroke-width': 2})); field.append(reward);
+      path.forEach((p, i) => { field.append(snode('rect', {class: 'arc-board-space', x: p.x - 14, y: p.y - 14, width: 28, height: 28, rx: 5, fill: i === goal ? '#efd282' : i % 2 ? '#e7ead8' : '#f9f5df', stroke: '#798d72', 'stroke-width': 1})); if (i > 0 && i < goal) field.append(snode('circle', {cx: p.x, cy: p.y, r: 2, fill: '#93a48a'})); });
+      const reward = snode('g', {class: 'arc-reward', transform: `translate(${path[goal].x} ${path[goal].y})`}); reward.append(snode('rect', {x: -8, y: -5, width: 16, height: 13, rx: 2, fill: '#c87369'}), snode('path', {d: 'M0-5V8M-9-5H9M0-6C-14-15-5-18 0-6C14-15 5-18 0-6', fill: 'none', stroke: '#fff0c0', 'stroke-width': 2})); field.append(reward);
       const pawn = snode('g', {class: 'arc-pawn'}); pawn.append(snode('ellipse', {cy: 8, rx: 8, ry: 3, fill: '#304e4933'}), snode('path', {d: 'M-7 6Q-8-2-3-4H3Q8-2 7 6Z', fill: '#4f8792', stroke: '#f5f4df', 'stroke-width': 1.5}), snode('circle', {cy: -7, r: 5, fill: '#4f8792', stroke: '#f5f4df', 'stroke-width': 1.5})); field.append(pawn);
-      const status = snode('text', {x: 99, y: 76, 'text-anchor': 'middle', class: 'arc-board-status'}, '9 TO GO'); field.append(status);
-      const controls = node('div', 'arc-board-dice'); body.append(controls); caption('CHOOSE A DIE · LAND EXACTLY');
-      let position = 0, motion = null, values = [1, 1];
-      const dice = [0, 1].map(i => button('arc-die', '', undefined, () => {
-        if (motion) return; feedback(); dice.forEach(die => { die.disabled = true; }); dice[i].classList.add('is-rolling'); motion = {start: age + 230, from: position, steps: values[i], die: i};
+      const status = snode('text', {x: 99, y: 76, 'text-anchor': 'middle', class: 'arc-board-status'}, `${goal} TO GO`); field.append(status);
+      const controls = node('div', 'arc-board-dice'); body.append(controls);
+      let position = 0, motion = null;
+      const dice = values.map((value, i) => button('arc-die', '', undefined, () => {
+        if (motion || used.has(i)) return; feedback(); used.add(i); dice.forEach(die => { die.disabled = true; }); dice[i].classList.add('is-rolling'); motion = {start: age + 230, from: position, steps: value, die: i};
       })); controls.append(...dice);
       const pips = [[0, 0], [-8, -8], [8, 8], [8, -8], [-8, 8], [-8, 0], [8, 0]];
       const pipIndices = {1: [0], 2: [1, 2], 3: [0, 1, 2], 4: [1, 2, 3, 4], 5: [0, 1, 2, 3, 4], 6: [1, 2, 3, 4, 5, 6]};
-      const rollOptions = () => {
-        values = [1 + integer(random, 6), 1 + integer(random, 6)];
-        if (9 - position <= 6) values[integer(random, 2)] = 9 - position;
-        dice.forEach((die, i) => { die.disabled = false; die.classList.remove('is-rolling'); die.setAttribute('aria-label', `Move ${values[i]} spaces`); die.innerHTML = svgText(pipIndices[values[i]].map(index => `<circle cx="${20 + pips[index][0]}" cy="${20 + pips[index][1]}" r="2.7" fill="currentColor" stroke="none"/>`).join('')); });
+      const paintDice = () => {
+        dice.forEach((die, i) => { die.disabled = used.has(i); die.classList.remove('is-rolling'); die.classList.toggle('is-used', used.has(i)); die.setAttribute('aria-label', `${used.has(i) ? 'Used: ' : ''}Move ${values[i]} spaces`); });
       };
+      dice.forEach((die, i) => { die.innerHTML = svgText(pipIndices[values[i]].map(index => `<circle cx="${20 + pips[index][0]}" cy="${20 + pips[index][1]}" r="2.7" fill="currentColor" stroke="none"/>`).join('')); });
       const paint = p => pawn.setAttribute('transform', `translate(${p.x} ${p.y})`);
-      const waypoint = index => path[index] || {x: 24 - (index - 9) * 18, y: 31 - (index - 9) * 9};
+      const waypoint = index => path[index] || {x: path[goal].x - (index - goal) * 18, y: path[goal].y - (index - goal) * 9};
       tickers.push(() => {
         if (!motion || age < motion.start) return;
         dice[motion.die].classList.remove('is-rolling');
-        if (motion.resetAt) { if (age >= motion.resetAt) { position = 0; paint(path[0]); status.textContent = '9 TO GO'; motion = null; rollOptions(); } return; }
+        if (motion.resetAt) { if (age >= motion.resetAt) { position = 0; used.clear(); paint(path[0]); status.textContent = `${goal} TO GO`; motion = null; paintDice(); } return; }
         const progress = Math.min(motion.steps, (age - motion.start) / 150), step = Math.floor(progress), t = progress - step;
         const fromIndex = motion.from + step, a = waypoint(fromIndex), b = waypoint(fromIndex + 1);
         paint({x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t - Math.sin(t * Math.PI) * 7});
         if (progress < motion.steps) return;
         position = motion.from + motion.steps;
-        if (position === 9) { paint(path[9]); status.textContent = 'A LITTLE GIFT!'; reward.classList.add('is-won'); hint.textContent = 'Landed exactly on the gift'; finish(); }
-        else if (position > 9) { paint(waypoint(position)); status.textContent = 'TOO FAR · RETRY'; hint.textContent = 'Past the gift. Back to the start.'; onFeedback('error'); motion.resetAt = age + 450; }
-        else { paint(path[position]); status.textContent = `${9 - position} TO GO`; hint.textContent = `${9 - position} spaces to the gift`; motion = null; rollOptions(); }
+        dice[motion.die].classList.add('is-used');
+        if (position === goal) { paint(path[goal]); status.textContent = 'A LITTLE GIFT!'; reward.classList.add('is-won'); hint.textContent = 'Landed exactly on the gift'; finish(); }
+        else if (position > goal || used.size === 4) { paint(waypoint(position)); status.textContent = position > goal ? 'TOO FAR · RETRY' : 'TRY AGAIN'; hint.textContent = 'Back to the start. Try a different combination of the same dice.'; onFeedback('error'); motion.resetAt = age + 450; }
+        else { paint(path[position]); status.textContent = `${goal - position} TO GO`; hint.textContent = `${goal - position} spaces to the gift`; motion = null; paintDice(); }
       });
-      paint(path[0]); rollOptions(); hint.textContent = 'Choose either die to move that many spaces. Land exactly on the gift.';
+      paint(path[0]); paintDice(); hint.textContent = 'Choose from the four dice. Each can be used once. Land exactly on the gift.';
     } else if (type === 'golf') {
       const field = scene('Mini golf. Drag back from the ball and release to putt. Keyboard: left/right aim, up/down power, Space to shoot.', true);
-      const mirror = random() < .5, reflect = x => mirror ? 200 - x : x;
-      const hole = {x: reflect(161), y: 31 + integer(random, 3) * 9, r: 8}, bumper = {x: 100, y: 77, r: 15};
-      let ball = {x: reflect(36), y: 118, vx: 0, vy: 0}, moving = false, drag = null, keyboardAngle = mirror ? -135 : -45, power = 34;
-      field.append(snode('rect', {x: 4, y: 4, width: 192, height: 142, rx: 18, fill: '#8fb78b', stroke: '#496f55', 'stroke-width': 5}), snode('path', {d: 'M13 102Q85 70 186 92M13 58Q115 31 185 53', fill: 'none', stroke: '#c4dcb1', opacity: '.3', 'stroke-width': 17}));
-      field.append(snode('circle', {cx: bumper.x, cy: bumper.y, r: bumper.r + 2, fill: '#547755'}), snode('circle', {cx: bumper.x, cy: bumper.y - 1, r: bumper.r, fill: '#bfd3a0', stroke: '#edf0c8', 'stroke-width': 2}), snode('circle', {cx: hole.x, cy: hole.y, r: 8, fill: '#293f35', stroke: '#d6e5b9', 'stroke-width': 2}), snode('path', {d: `M${hole.x} ${hole.y - 2}v-22l14 5-14 5`, fill: '#efb269', stroke: '#fff2d3', 'stroke-width': 1.5, 'stroke-linejoin': 'round'}));
+      const {start, hole, obstacles, turf} = generateGolf(random);
+      let ball = {...start, vx: 0, vy: 0}, moving = false, drag = null, keyboardAngle = Math.atan2(hole.y - start.y, hole.x - start.x) * 180 / Math.PI, power = 34;
+      const stripes = ['M13 102Q85 70 186 92M13 58Q115 31 185 53', 'M48 14Q74 80 43 136M116 14Q146 80 113 136', 'M12 118L167 12M38 140L192 36'];
+      field.append(snode('rect', {x: 4, y: 4, width: 192, height: 142, rx: 18, fill: ['#8fb78b', '#8eaf94', '#a2bc88'][turf], stroke: '#496f55', 'stroke-width': 5}), snode('path', {d: stripes[turf], fill: 'none', stroke: '#d1e0b5', opacity: '.3', 'stroke-width': 17}));
+      obstacles.forEach(obstacle => {
+        if (obstacle.kind === 'wall') field.append(snode('rect', {class: 'arc-golf-wall', x: obstacle.x - obstacle.w / 2, y: obstacle.y - obstacle.h / 2, width: obstacle.w, height: obstacle.h, rx: 3, fill: '#d2c596', stroke: '#f4e9bd', 'stroke-width': 2}));
+        else field.append(snode('circle', {cx: obstacle.x, cy: obstacle.y, r: obstacle.r + 2, fill: '#547755'}), snode('circle', {class: 'arc-golf-bumper', cx: obstacle.x, cy: obstacle.y, r: obstacle.r, fill: '#bfd3a0', stroke: '#edf0c8', 'stroke-width': 2}));
+      });
+      field.append(snode('circle', {class: 'arc-golf-hole', cx: hole.x, cy: hole.y, r: 8, fill: '#293f35', stroke: '#d6e5b9', 'stroke-width': 2}), snode('path', {d: `M${hole.x} ${hole.y - 2}v-22l14 5-14 5`, fill: '#efb269', stroke: '#fff2d3', 'stroke-width': 1.5, 'stroke-linejoin': 'round'}));
       const guide = snode('path', {class: 'arc-golf-guide', visibility: 'hidden'}), grip = snode('circle', {cx: ball.x, cy: ball.y, r: 12, fill: 'none', stroke: '#eef4d9', 'stroke-width': 1, opacity: '.7'}), ballEl = snode('circle', {cx: ball.x, cy: ball.y, r: 5, fill: '#fffef3', stroke: '#516f59', 'stroke-width': 1, class: 'arc-golf-ball'});
       field.append(guide, grip, ballEl); const label = caption('PULL BACK · RELEASE');
       const paintBall = () => { attr(ballEl, {cx: ball.x, cy: ball.y}); attr(grip, {cx: ball.x, cy: ball.y, visibility: moving ? 'hidden' : 'visible'}); };
@@ -377,7 +445,7 @@
       });
       tickers.push(dt => {
         if (!moving) return;
-        const sunk = advanceBall(ball, dt / 1000, {friction: 1.35, radius: 5, top: 4, bottom: 146, left: 4, right: 196, bounce: .7, obstacles: [bumper], hole}); paintBall();
+        const sunk = advanceBall(ball, dt / 1000, {friction: 1.35, radius: 5, top: 4, bottom: 146, left: 4, right: 196, bounce: .7, obstacles, hole}); paintBall();
         if (sunk) { moving = false; ballEl.classList.add('is-sunk'); label.textContent = 'IN THE CUP!'; hint.textContent = 'Ball in the hole'; finish(); }
         else if (Math.hypot(ball.vx, ball.vy) < 6) { moving = false; ball.vx = ball.vy = 0; paintBall(); label.textContent = 'PULL BACK · RELEASE'; }
       });
