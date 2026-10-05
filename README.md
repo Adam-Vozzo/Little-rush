@@ -1,6 +1,6 @@
 # Little Rush
 
-A mobile-first 2D micro-game collection with 29 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.11.0 adds live cardinal drag feedback, a peg rebound guide, and more varied planet and board layouts. Refined controls and flat artwork keep the games clear at small sizes. No libraries, external assets, account or network connection are required to play.
+A mobile-first 2D micro-game collection with 29 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.11.1 gives the planets more space in a larger sky and adds dotted grips to the slider handles. Refined controls and flat artwork keep the games clear at small sizes. No libraries, external assets, account or network connection are required to play.
 
 ## Play
 
