@@ -670,9 +670,14 @@
       targetEl.style.left = `${target}%`;
       const slider = slidingControl({ track: machine, handle: claw, initial, label: 'Drag the claw over the flower', describe: value => `${Math.round(value)}%; flower at ${target}%`, canMove: () => dropAt === null && !held });
       const controls = node('div', 'ex-catch-controls');
-      const stopMoving = () => {
+      const stopMoving = (settleTap = false) => {
         if (!held) return;
-        const control = held.control; held = null;
+        const owner = held, control = owner.control; held = null;
+        // Very short taps may fall between animation frames. Give those a tiny
+        // release nudge without adding a jump or a delay at the start of a hold.
+        if (settleTap === true && age - owner.since < 120 && Math.abs(slider.value - owner.origin) < 1) {
+          slider.nudgeTo(owner.origin + owner.direction);
+        }
         control.classList.remove('is-held'); release(control);
       };
       suspenders.push(stopMoving);
@@ -686,12 +691,11 @@
       const arrow = (direction, label, text) => {
         const control = button('ex-key ex-claw-arrow', label, text, event => {
           // Screen readers issue a click without a pointer or held key.
-          if (event.detail === 0 && !held && dropAt === null && !slider.dragging) { slider.nudgeTo(slider.value + direction * 2); feedback(); }
+          if (event.detail === 0 && !held && dropAt === null && !slider.dragging) { slider.nudgeTo(slider.value + direction); feedback(); }
         });
         const begin = (pointer, key) => {
           if (held || dropAt !== null || slider.dragging) return false;
-          slider.nudgeTo(slider.value + direction * 2);
-          held = {control, direction, pointer, key, since: age};
+          held = {control, direction, pointer, key, since: age, origin: slider.value};
           control.classList.add('is-held'); feedback(); return true;
         };
         listen(control, 'pointerdown', event => {
@@ -699,13 +703,13 @@
           event.preventDefault(); if (begin(event.pointerId, null)) capture(control, event);
         });
         for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) listen(control, eventName, event => {
-          if (held?.control === control && held.pointer === event.pointerId) { event.preventDefault(); stopMoving(); }
+          if (held?.control === control && held.pointer === event.pointerId) { event.preventDefault(); stopMoving(eventName === 'pointerup'); }
         });
         listen(control, 'keydown', event => {
           if (![' ', 'Enter'].includes(event.key)) return;
           event.preventDefault(); if (!event.repeat) begin(null, event.key);
         });
-        listen(control, 'keyup', event => { if (held?.control === control && held.key === event.key) { event.preventDefault(); stopMoving(); } });
+        listen(control, 'keyup', event => { if (held?.control === control && held.key === event.key) { event.preventDefault(); stopMoving(true); } });
         listen(control, 'blur', stopMoving);
         return control;
       };
@@ -713,15 +717,18 @@
       tickers.push(delta => {
         const dt = Math.min(delta, 32) / 1000;
         if (held && dropAt === null) {
-          const speed = 46 * (1 - Math.exp(-Math.max(0, age - held.since - 120) / 130));
+          const seconds = Math.max(0, age - held.since) / 1000;
+          // Integrate a smooth 18 → 46%/s acceleration from the first frame.
+          // Absolute game-clock travel stays consistent across refresh rates.
+          const distance = 46 * seconds - 28 * .12 * (1 - Math.exp(-seconds / .12));
           // The slider's direct manipulation lock does not apply to its owner.
-          const owner = held; held = null; slider.nudgeTo(slider.value + owner.direction * speed * dt); held = owner;
+          const owner = held; held = null; slider.nudgeTo(owner.origin + owner.direction * distance); held = owner;
         }
         const velocity = dt ? clamp((slider.value - previousPosition) / dt, -65, 65) : 0;
-        swingVelocity -= (velocity - previousVelocity) * .65;
+        swingVelocity -= (velocity - previousVelocity) * 1.8;
         previousPosition = slider.value; previousVelocity = velocity;
-        swingVelocity += (-swing * 85 - swingVelocity * 5.5) * dt;
-        swing = clamp(swing + swingVelocity * dt, -12, 12);
+        swingVelocity += (-swing * 70 - swingVelocity * 4.4) * dt;
+        swing = clamp(swing + swingVelocity * dt, -22, 22);
         if (Math.abs(swing) + Math.abs(swingVelocity) < .03) swing = swingVelocity = 0;
         claw.style.setProperty('--claw-swing', `${swing.toFixed(2)}deg`);
         rod.style.left = claw.style.left;

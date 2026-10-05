@@ -26,7 +26,7 @@
    */
   class LittleRushEngine {
     constructor({ types = [], random = Math.random, initialType = null,
-      spawnIntervalMs = SPAWN_INTERVAL_MS, tileLifetimeMs = TILE_LIFETIME_MS, firstSpawnDelayMs = 0, scoringMode = 'off',
+      spawnIntervalMs = SPAWN_INTERVAL_MS, tileLifetimeMs = TILE_LIFETIME_MS, firstSpawnDelayMs = 0, scoringMode = 'off', zen = false,
       isTypeAvailable = () => true, onChange, onSpawn, onComplete, onEnd } = {}) {
       this.types = [...new Set(types.filter(type => typeof type === "string" && type.length))];
       if (!this.types.length) throw new TypeError("At least one micro-game type is required.");
@@ -38,6 +38,7 @@
       this.tileLifetimeMs = tileLifetimeMs;
       this.firstSpawnDelayMs = firstSpawnDelayMs;
       this.scoringMode = scoringMode;
+      this.zen = zen;
       this.points = 0;
       this.isTypeAvailable = isTypeAvailable;
       this.onChange = onChange;
@@ -72,7 +73,8 @@
       this._pausedAt = this._endedAt = null;
       this._previousType = null;
       this._queuedTypes = [];
-      if (!this.firstSpawnDelayMs) this._spawn(now, now, this.initialType);
+      if (this.zen) this._fill(now);
+      else if (!this.firstSpawnDelayMs) this._spawn(now, now, this.initialType);
       this._changed(now);
       return this.snapshot(now);
     }
@@ -86,6 +88,12 @@
     tick(now = clock()) {
       if (this.status !== "running") return this.snapshot(now);
       now = this._advanceTime(now);
+      if (this.zen) {
+        const released = this._releaseCompleted(now);
+        const filled = this._fill(now);
+        if (released || filled) this._changed(now);
+        return this.snapshot(now);
+      }
       // An already-missed deadline always wins over a delayed animation frame.
       const overdue = this._earliestTile();
       if (overdue && overdue.deadline <= now) {
@@ -127,8 +135,8 @@
       if (slot < 0) return false;
       const tile = this.tiles[slot];
       if (tile.completedAt !== undefined) return false;
-      const remaining = Math.max(0, Math.min(1, (tile.deadline - now) / (tile.deadline - tile.startedAt)));
-      tile.points = this.scoringMode === 'off' ? 0 : Math.max(1, Math.round(100 * (this.scoringMode === 'late' ? 1 - remaining : remaining)));
+      const remaining = this.zen ? 0 : Math.max(0, Math.min(1, (tile.deadline - now) / (tile.deadline - tile.startedAt)));
+      tile.points = this.zen || this.scoringMode === 'off' ? 0 : Math.max(1, Math.round(100 * (this.scoringMode === 'late' ? 1 - remaining : remaining)));
       this.points += tile.points;
       if (settleMs > 0 && Number.isFinite(settleMs)) {
         tile.completedAt = now;
@@ -136,6 +144,7 @@
       } else this.tiles[slot] = null;
       this.score += 1;
       this._emit("onComplete", { ...tile }, this.snapshot(now));
+      if (this.zen) this._fill(now);
       this._changed(now);
       return true;
     }
@@ -160,7 +169,7 @@
       for (const tile of this.tiles) {
         if (!tile) continue;
         tile.startedAt += pauseDuration;
-        tile.deadline += pauseDuration;
+        if (tile.deadline !== null) tile.deadline += pauseDuration;
         if (tile.completedAt !== undefined) { tile.completedAt += pauseDuration; tile.releaseAt += pauseDuration; }
       }
       this._pausedAt = null;
@@ -176,15 +185,17 @@
         : Math.max(now, this._lastNow);
       return {
         status: this.status,
+        zen: this.zen,
         score: this.score,
         points: this.points,
         elapsedMs: this.status === "idle" ? 0 : Math.max(0, effectiveNow - this._startedAt),
-        nextSpawnInMs: this.status === "idle" || this.status === "ended" ? 0
+        nextSpawnInMs: this.zen ? null : this.status === "idle" || this.status === "ended" ? 0
           : Math.max(0, this._nextSpawnAt - effectiveNow),
         tiles: this.tiles.map(tile => tile ? {
           ...tile,
+          ageMs: Math.max(0, effectiveNow - tile.startedAt),
           releaseInMs: tile.releaseAt === undefined ? null : Math.max(0, tile.releaseAt - effectiveNow),
-          remainingMs: Math.max(0, tile.deadline - effectiveNow)
+          remainingMs: tile.deadline === null ? null : Math.max(0, tile.deadline - effectiveNow)
         } : null),
         expiredTileId: this.expiredTileId
       };
@@ -219,7 +230,7 @@
       const type = choices.includes(preferredType) ? preferredType
         : queuedIndex >= 0 ? this._queuedTypes.splice(queuedIndex, 1)[0]
         : this._pick(choices);
-      const tile = { id: `tile-${++this._serial}`, type, slot, startedAt: at, deadline: at + this.tileLifetimeMs };
+      const tile = { id: `tile-${++this._serial}`, type, slot, startedAt: at, deadline: this.zen ? null : at + this.tileLifetimeMs };
       this.tiles[slot] = tile;
       this._previousType = type;
       this._emit("onSpawn", { ...tile }, this.snapshot(now));
@@ -229,9 +240,18 @@
     _earliestTile() {
       let earliest = null;
       for (const tile of this.tiles) {
-        if (tile && tile.completedAt === undefined && (!earliest || tile.deadline < earliest.deadline)) earliest = tile;
+        if (tile && tile.deadline !== null && tile.completedAt === undefined && (!earliest || tile.deadline < earliest.deadline)) earliest = tile;
       }
       return earliest;
+    }
+
+    _fill(now) {
+      let changed = false;
+      for (let slot = 0; slot < SLOT_COUNT; slot++) {
+        if (!this._spawn(now, now)) break;
+        changed = true;
+      }
+      return changed;
     }
 
     _releaseCompleted(now) {

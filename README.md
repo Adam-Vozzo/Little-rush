@@ -1,6 +1,6 @@
 # Little Rush
 
-A mobile-first 2D micro-game collection with 23 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.6.0 adds an aim trainer, clearer Simon sectors, immediate shape dragging, continuous wall sliding, hold-to-move claw controls, and animated retry cooldowns. No libraries, external assets, account or network connection are required to play.
+A mobile-first 2D micro-game collection with 23 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.7.0 adds endless Zen mode, playable practice tiles in Tweaks, and smooth claw acceleration with a stronger momentum swing. No libraries, external assets, account or network connection are required to play.
 
 ## Play
 
@@ -34,6 +34,8 @@ Future pushes to `main` update the site automatically. See [GitHub's publishing-
 
 The main menu defaults to **Normal** (2.5-second spawns, 25-second expiry). **Calm** uses 3-second spawns and 30-second expiry; **Extreme** uses 1.5-second spawns and 15-second expiry. The selection is saved locally and applied at the next run.
 
+**Zen** starts with all eight slots filled and immediately replaces a completed game after its finishing animation. Tiles never expire. The HUD shows only the number completed and a Zen label: no points or run timer. Timing-based points preferences are retained for timed modes. Zen does not change timed-run records. Games keep their own interaction timing, such as Simon playback and the aim trainer. Hatch and Feed can repeat in Zen so even a small enabled game pool keeps the board full.
+
 In **Tweaks → Gameplay**, enable **Time-based points** to replace the top-left cleared count with a cumulative points score. **Faster clears** awards the rounded percentage of tile lifetime remaining (1–100 points); **Closer to expiry** awards the rounded percentage elapsed (1–100). Expired tiles earn nothing. Both use active game time, so pausing cannot alter the reward. Completed tiles display their award briefly, while the engine continues tracking cleared count independently. Existing title-screen cleared records remain completion records.
 
 Successful tiles retain their completed pose before leaving: 720ms for pipes, the beetle and Match, 880ms for the geode, and 480ms for other games. These tiles have already scored, cannot expire or score twice, and reserve their slot until the exit finishes. Their completion timing freezes when paused.
@@ -42,10 +44,12 @@ Successful tiles retain their completed pose before leaving: 720ms for pipes, th
 
 The title screen shows **All-time best** and **Today's best**. Each keeps the longest survival time and the highest cleared count independently, so those two records can come from different runs. Records are saved locally in this browser. Daily records follow the device's local calendar date.
 
-Open **Tweaks** beside the title. Its **Micro-games** tab shows a two-column gallery with a preview and toggle for every game; its **Styles** tab controls the appearance. The **Gameplay** tab configures time-based points. The game selection is saved in this browser and applies to the next run. All games are enabled initially.
+Open **Tweaks** beside the title. Its **Micro-games** tab shows a two-column gallery with a playable tile and toggle for every game; its **Styles** tab controls the appearance. The **Gameplay** tab configures time-based points. The game selection is saved in this browser and applies to the next run. All games are enabled initially.
+
+Practice directly in any tile, including games disabled for runs. A completed tile briefly retains its final state, then resets to a fresh puzzle. Practice has no tile expiry and never changes run progress or records. Offscreen and hidden-page previews pause; closing or switching tabs cleans up their controls. Feed has its own practice butterfly, independent of the run.
 
 - Turning off **WAIT & HATCH** also turns off **FEED BUTTERFLY**. Feed can only be enabled while Hatch is enabled.
-- At least one repeatable challenge must be enabled to start. **WAIT & HATCH** alone is not a valid game pool.
+- At least one repeatable challenge must be enabled to start. **WAIT & HATCH** alone is not a valid timed-run pool; Zen allows it to repeat.
 - The first challenge is randomly chosen from the enabled, currently available games; Hatch has no special priority.
 
 In **Styles**, choose **Flat** or **Holofoil**. Style changes apply immediately, are saved in this browser and are restored when the game is reopened.
@@ -85,7 +89,7 @@ Tile colors identify five consistent categories:
 | SIGN HERE | Draw any sufficiently long signature inside the box, then lift your finger. |
 | REMEMBER | Remember a five-character code containing letters and digits. Press Start to hide it and reveal the keys. A mistake reveals it again for a deliberate retry. |
 | SLIDE TO MARKS | Grab and slide three large knobs into the wider target marks. No visible target numbers; tapping the track does not move them. |
-| CATCH IT | Move the claw with the bottom left/right arrows or drag it, then press the center Drop button. Hold an arrow to travel, tap for a tiny nudge, then release for a momentum swing. The rod extends over 700ms, pauses to grab, and retracts before completion. |
+| CATCH IT | Move the claw with the bottom left/right arrows or drag it, then press the center Drop button. Hold an arrow for continuous movement from the first frame, tap for a tiny nudge, then release for a stronger, naturally settling momentum swing. The rod extends over 700ms, pauses to grab, and retracts before completion. |
 | UPLOAD | Tap Upload, wait for the three-second progress bar, then tap Complete. |
 | JOIN PIPES | Rotate six pipe segments to connect the two endpoints of a generated puzzle. |
 | TAP LOW TO HIGH | Tap the dice in ascending dot-count order. |
@@ -101,6 +105,7 @@ Select **Let's play** on the title screen to start a run. The play screen gives 
 - `microgames.js` and `microgames.css`: ten core games, including hatch, geode, wire, switch and shape interactions.
 - `extra-games.js` and `extra-games.css`: twelve additional games, pure puzzle generators, and the shared thumb-only slider control.
 - `butterfly.js` and `butterfly.css`: persistent butterfly and cross-board nectar drag interaction.
+- `previews.js`: isolated practice clocks, completion resets, visibility pausing, and the practice butterfly.
 - `app.js`: title and play screens, the one-time hatch and Feed gating, Tweaks selections, countdowns, sounds and local daily/all-time records.
 - `styles.css`: compact responsive portrait board, title screen and dialogs.
 - `theme.js` and `theme.css`: Flat/Holofoil appearance, shared WebGL foil rendering, tile landing animation, reduced-motion support and the CSS fallback.

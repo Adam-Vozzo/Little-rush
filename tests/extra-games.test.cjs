@@ -282,10 +282,10 @@ test('claw arrows give a tiny tap nudge, continuous hold, and a release swing th
   const g=game('catch'),claw=g.one('.ex-claw'),initial=Number(claw.getAttribute('aria-valuenow'));
   const right=g.label('Move claw right');
   right.dispatch('pointerdown'); g.tick(16,16); right.dispatch('pointerup'); right.dispatch('click',{detail:1});
-  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial+2);
+  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial+1);
   assert.notEqual(claw.style['--claw-swing'],'0.00deg');
   for(let t=32;t<=1000;t+=16)g.tick(t,16);
-  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial+2);
+  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial+1);
   right.dispatch('pointerdown');
   for(let t=1016;t<=1600;t+=16)g.tick(t,16);
   const heldPosition=Number(claw.getAttribute('aria-valuenow'));
@@ -293,10 +293,40 @@ test('claw arrows give a tiny tap nudge, continuous hold, and a release swing th
   right.dispatch('pointerup');
   let maxSwing=0;
   for(let t=1616;t<=4000;t+=16){g.tick(t,16);maxSwing=Math.max(maxSwing,Math.abs(parseFloat(claw.style['--claw-swing'])));}
-  assert.ok(maxSwing>1);assert.ok(Math.abs(parseFloat(claw.style['--claw-swing']))<.1);
+  assert.ok(maxSwing>6);assert.ok(Math.abs(parseFloat(claw.style['--claw-swing']))<.1);
   assert.equal(Number(claw.getAttribute('aria-valuenow')),heldPosition);
   g.label('Drop claw').click();right.dispatch('pointerdown');g.tick(4100,16);
   assert.equal(Number(claw.getAttribute('aria-valuenow')),heldPosition);
+});
+
+test('claw holds move on every frame from the first press, with no nudge-pause-restart', () => {
+  const endPositions = [];
+  for (const fps of [30, 60, 120]) {
+    const g = game('catch'), right = g.label('Move claw right'), claw = g.one('.ex-claw');
+    let previous = parseFloat(claw.style.left), lastStep = 0;
+    right.dispatch('pointerdown');
+    assert.equal(parseFloat(claw.style.left), previous, 'pressing does not teleport the claw');
+    const frames = Math.round(fps * .6);
+    for (let frame = 1; frame <= frames; frame++) {
+      g.tick(frame * 1000 / fps, 1000 / fps);
+      const position = parseFloat(claw.style.left), step = position - previous;
+      assert.ok(step > 0, 'every held frame moves, including the first 120ms');
+      assert.ok(step >= lastStep - .00001, 'acceleration never stalls or reverses');
+      previous = position; lastStep = step;
+    }
+    endPositions.push(previous); right.dispatch('pointerup'); g.tick(700, 16);
+    assert.equal(parseFloat(claw.style.left), previous, 'release stops horizontal travel');
+  }
+  assert.ok(Math.max(...endPositions) - Math.min(...endPositions) < .00001);
+});
+
+test('a claw tap between frames nudges once, while a cancelled press does not move', () => {
+  const g = game('catch'), right = g.label('Move claw right'), claw = g.one('.ex-claw');
+  const initial = parseFloat(claw.style.left);
+  right.dispatch('pointerdown'); right.dispatch('pointerup'); right.dispatch('click', {detail: 1});
+  assert.equal(parseFloat(claw.style.left), initial + 1);
+  right.dispatch('pointerdown'); right.dispatch('pointercancel');
+  assert.equal(parseFloat(claw.style.left), initial + 1);
 });
 test('random level targets and initial knobs are always separated and each puzzle can be dragged into place', () => {
   const variations = new Set();
