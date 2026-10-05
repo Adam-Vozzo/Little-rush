@@ -26,6 +26,7 @@
    */
   class LittleRushEngine {
     constructor({ types = [], random = Math.random, initialType = null,
+      spawnIntervalMs = SPAWN_INTERVAL_MS, tileLifetimeMs = TILE_LIFETIME_MS, firstSpawnDelayMs = 0, scoringMode = 'off',
       isTypeAvailable = () => true, onChange, onSpawn, onComplete, onEnd } = {}) {
       this.types = [...new Set(types.filter(type => typeof type === "string" && type.length))];
       if (!this.types.length) throw new TypeError("At least one micro-game type is required.");
@@ -33,6 +34,11 @@
       if (typeof isTypeAvailable !== "function") throw new TypeError("isTypeAvailable must be a function.");
       this.random = random;
       this.initialType = initialType;
+      this.spawnIntervalMs = spawnIntervalMs;
+      this.tileLifetimeMs = tileLifetimeMs;
+      this.firstSpawnDelayMs = firstSpawnDelayMs;
+      this.scoringMode = scoringMode;
+      this.points = 0;
       this.isTypeAvailable = isTypeAvailable;
       this.onChange = onChange;
       this.onSpawn = onSpawn;
@@ -54,16 +60,19 @@
 
     start(now = clock()) {
       now = this._time(now);
+      if (![this.spawnIntervalMs, this.tileLifetimeMs].every(value => Number.isFinite(value) && value > 0)
+        || !Number.isFinite(this.firstSpawnDelayMs) || this.firstSpawnDelayMs < 0) throw new TypeError('Invalid game timing.');
       this.status = "running";
       this.score = 0;
+      this.points = 0;
       this.tiles = Array(SLOT_COUNT).fill(null);
       this.expiredTileId = null;
       this._startedAt = this._lastNow = now;
-      this._nextSpawnAt = now + SPAWN_INTERVAL_MS;
+      this._nextSpawnAt = now + (this.firstSpawnDelayMs || this.spawnIntervalMs);
       this._pausedAt = this._endedAt = null;
       this._previousType = null;
       this._queuedTypes = [];
-      this._spawn(now, now, this.initialType);
+      if (!this.firstSpawnDelayMs) this._spawn(now, now, this.initialType);
       this._changed(now);
       return this.snapshot(now);
     }
@@ -93,9 +102,12 @@
           return this.snapshot(now);
         }
         const spawnAt = this._nextSpawnAt;
-        this._nextSpawnAt += SPAWN_INTERVAL_MS;
+        this._nextSpawnAt += this.spawnIntervalMs;
+        this._releaseCompleted(spawnAt);
         changed = this._spawn(spawnAt, now) || changed;
       }
+
+      changed = this._releaseCompleted(now) || changed;
 
       const expired = this._earliestTile();
       if (expired && expired.deadline <= now) {
@@ -106,7 +118,7 @@
       return this.snapshot(now);
     }
 
-    complete(id, now = clock()) {
+    complete(id, now = clock(), settleMs = 0) {
       if (this.status !== "running") return false;
       now = this._advanceTime(now);
       this.tick(now);
@@ -114,7 +126,14 @@
       const slot = this.tiles.findIndex(tile => tile && tile.id === id);
       if (slot < 0) return false;
       const tile = this.tiles[slot];
-      this.tiles[slot] = null;
+      if (tile.completedAt !== undefined) return false;
+      const remaining = Math.max(0, Math.min(1, (tile.deadline - now) / (tile.deadline - tile.startedAt)));
+      tile.points = this.scoringMode === 'off' ? 0 : Math.max(1, Math.round(100 * (this.scoringMode === 'late' ? 1 - remaining : remaining)));
+      this.points += tile.points;
+      if (settleMs > 0 && Number.isFinite(settleMs)) {
+        tile.completedAt = now;
+        tile.releaseAt = now + settleMs;
+      } else this.tiles[slot] = null;
       this.score += 1;
       this._emit("onComplete", { ...tile }, this.snapshot(now));
       this._changed(now);
@@ -142,6 +161,7 @@
         if (!tile) continue;
         tile.startedAt += pauseDuration;
         tile.deadline += pauseDuration;
+        if (tile.completedAt !== undefined) { tile.completedAt += pauseDuration; tile.releaseAt += pauseDuration; }
       }
       this._pausedAt = null;
       this.status = "running";
@@ -157,11 +177,13 @@
       return {
         status: this.status,
         score: this.score,
+        points: this.points,
         elapsedMs: this.status === "idle" ? 0 : Math.max(0, effectiveNow - this._startedAt),
         nextSpawnInMs: this.status === "idle" || this.status === "ended" ? 0
           : Math.max(0, this._nextSpawnAt - effectiveNow),
         tiles: this.tiles.map(tile => tile ? {
           ...tile,
+          releaseInMs: tile.releaseAt === undefined ? null : Math.max(0, tile.releaseAt - effectiveNow),
           remainingMs: Math.max(0, tile.deadline - effectiveNow)
         } : null),
         expiredTileId: this.expiredTileId
@@ -197,7 +219,7 @@
       const type = choices.includes(preferredType) ? preferredType
         : queuedIndex >= 0 ? this._queuedTypes.splice(queuedIndex, 1)[0]
         : this._pick(choices);
-      const tile = { id: `tile-${++this._serial}`, type, slot, startedAt: at, deadline: at + TILE_LIFETIME_MS };
+      const tile = { id: `tile-${++this._serial}`, type, slot, startedAt: at, deadline: at + this.tileLifetimeMs };
       this.tiles[slot] = tile;
       this._previousType = type;
       this._emit("onSpawn", { ...tile }, this.snapshot(now));
@@ -207,9 +229,17 @@
     _earliestTile() {
       let earliest = null;
       for (const tile of this.tiles) {
-        if (tile && (!earliest || tile.deadline < earliest.deadline)) earliest = tile;
+        if (tile && tile.completedAt === undefined && (!earliest || tile.deadline < earliest.deadline)) earliest = tile;
       }
       return earliest;
+    }
+
+    _releaseCompleted(now) {
+      let changed = false;
+      this.tiles.forEach((tile, slot) => {
+        if (tile?.releaseAt <= now) { this.tiles[slot] = null; changed = true; }
+      });
+      return changed;
     }
 
     _end(tile) {

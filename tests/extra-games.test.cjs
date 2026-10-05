@@ -7,7 +7,7 @@ const path = require('node:path');
 // DOM double for puzzle semantics. Browser QA checks rendering and real touch.
 class Element {
   constructor(tag) {
-    this.tagName = tag; this.children = []; this.attributes = {}; this.style = {};
+    this.tagName = tag; this.children = []; this.attributes = {}; this.style = { setProperty(name,value) { this[name] = value; } };
     this.listeners = new Map(); this.className = ''; this.disabled = false; this._text = '';
     this.classList = {
       contains: name => this.className.split(/\s+/).includes(name),
@@ -90,8 +90,8 @@ function mazeGeometry(g) {
   return { maze, center: index => ({ clientX: left + (index % 5 + .5) * width, clientY: top + (Math.floor(index / 5) + .5) * width }) };
 }
 
-test('all ten extensions register, mount, and remain inert in demo mode', () => {
-  assert.equal(catalog.length, 10); assert.equal(new Set(catalog.map(item => item.id)).size, 10);
+test('all eleven extensions register, mount, and remain inert in demo mode', () => {
+  assert.equal(catalog.length, 11); assert.equal(new Set(catalog.map(item => item.id)).size, 11);
   for (const item of catalog) {
     const g = game(item.id, { demo: true });
     g.all('button').forEach(button => button.click()); g.tick(15000);
@@ -100,7 +100,7 @@ test('all ten extensions register, mount, and remain inert in demo mode', () => 
   }
 });
 test('extras expose concise objectives with consistent category colors', () => {
-  const expected = { roll: ['TURN UPRIGHT', 'sage'], type: ['TYPE THE WORD', 'lavender'], maze: ['DRAG TO EXIT', 'blue'], sign: ['SIGN HERE', 'sage'], memory: ['REMEMBER', 'lavender'], level: ['SLIDE TO MARKS', 'blue'], catch: ['CATCH IT', 'sage'], upload: ['UPLOAD', 'peach'], connect: ['JOIN PIPES', 'blue'], dice: ['TAP LOW TO HIGH', 'butter'] };
+  const expected = { match: ['MATCH', 'sage'], roll: ['TURN UPRIGHT', 'sage'], type: ['TYPE THE WORD', 'lavender'], maze: ['DRAG TO EXIT', 'blue'], sign: ['SIGN HERE', 'sage'], memory: ['REMEMBER', 'lavender'], level: ['SLIDE TO MARKS', 'blue'], catch: ['CATCH IT', 'sage'], upload: ['UPLOAD', 'peach'], connect: ['JOIN PIPES', 'blue'], dice: ['TAP LOW TO HIGH', 'butter'] };
   catalog.forEach(item => assert.deepEqual([item.title, item.color], expected[item.id]));
 });
 test('roll requires beetle to reach upright', () => {
@@ -134,7 +134,7 @@ test('maze checks every crossed passage during a fast straight swipe and stops b
   // The entire eastward corridor is open, but the outer east wall remains closed.
   maze.dispatch('pointermove', { ...center(4), clientX: center(4).clientX + 80 });
   assert.equal(g.one('.is-player').getAttribute('data-cell'), '4'); assert.equal(maze.captured, 1);
-  assert.equal(g.completions, 0); assert.equal(g.feedback.at(-1), 'error');
+  assert.equal(g.completions, 0); assert.equal(g.feedback.includes('error'), false);
   maze.dispatch('pointermove', center(4)); maze.dispatch('pointerup', center(24));
   assert.equal(g.one('.is-player').getAttribute('data-cell'), '24'); assert.equal(maze.captured, null);
 });
@@ -144,7 +144,7 @@ test('maze cannot jump through walls or cut diagonally across cell corners', () 
   maze.dispatch('pointerdown', center(0)); maze.dispatch('pointermove', center(10));
   assert.equal(g.one('.is-player').getAttribute('data-cell'), '0'); assert.equal(maze.captured, 1);
   maze.dispatch('pointermove', center(0)); maze.dispatch('pointermove', center(6));
-  assert.equal(g.one('.is-player').getAttribute('data-cell'), '0'); assert.equal(maze.captured, 1);
+  assert.equal(g.one('.is-player').getAttribute('data-cell'), '1'); assert.equal(maze.captured, 1);
   // A right-then-down route exists in this toy maze, but its corner is not a passage.
   const corner = { width: 2, height: 2, cells: [2, 12, 0, 1] };
   const trace = puzzles.traceMazeSegment(corner, 0, [.5, .5], [1.5, 1.5]);
@@ -255,12 +255,39 @@ test('free signature has an explicit Enter-key accessible alternative', () => {
   paper.click(); paper.dispatch('keydown', { key: 'Enter', repeat: true }); assert.equal(g.completions, 0);
   paper.dispatch('keydown', { key: 'Enter', repeat: false }); completedOnce(g);
 });
-test('memory hides the digits before accepting answers and reveals errors for a retry', () => {
-  const g = game('memory'); g.label('Recall 1').click(); assert.equal(g.completions, 0);
-  g.tick(1400); assert.equal(g.one('.ex-memory-code').textContent, '···');
-  g.label('Recall 2').click(); assert.equal(g.one('.ex-memory-code').textContent, '111');
-  g.tick(2299); assert.equal(g.label('Recall 1').disabled, true);
-  g.tick(2300); for (let i = 0; i < 3; i++) g.label('Recall 1').click(); completedOnce(g);
+test('memory waits for Start, uses five mixed characters, and allows a deliberate retry', () => {
+  for(let seed=1;seed<=60;seed++){
+    const g=game('memory',{random:seeded(seed)}), code=g.one('.ex-memory-code').textContent;
+    assert.match(code,/^[A-Z2-9]{5}$/);assert.match(code,/[A-Z]/);assert.match(code,/[2-9]/);
+    g.tick(12000);assert.equal(g.one('.ex-memory-code').textContent,code);assert.equal(g.one('.ex-mini-keys').hidden,true);
+    g.label('Recall '+code[0]).click();assert.equal(g.completions,0);
+    g.label('Start recall').click();assert.equal(g.one('.ex-memory-code').textContent,'·····');assert.equal(g.one('.ex-mini-keys').hidden,false);
+    const wrong=g.all('.ex-key').find(k=>k.getAttribute('aria-label').startsWith('Recall ')&&k.textContent!==code[0]);
+    wrong.click();assert.equal(g.one('.ex-memory-code').textContent,code);assert.equal(g.one('.ex-mini-keys').hidden,true);
+    g.label('Start recall').click();[...code].forEach(c=>g.label('Recall '+c).click());completedOnce(g);
+  }
+});
+test('Match requires color and shape, permits retries, and every target can be stopped', () => {
+  for(let seed=1;seed<=60;seed++){
+    const g=game('match',{random:seeded(seed)}),target=g.one('.ex-match-shape').getAttribute('aria-label');
+    const reel=g.one('.ex-match-strip').children, index=reel.findIndex(el=>el.getAttribute('aria-label')===target);
+    const wrong=(index+1)%9;
+    g.tick(wrong*620);g.one('.ex-match-stop').click();assert.equal(g.completions,0);assert.equal(g.feedback.at(-1),'error');
+    const next=((index<=wrong?9:0)+index)*620+500;
+    g.tick(next);g.one('.ex-match-stop').click();completedOnce(g);
+  }
+});
+test('claw arrows move smoothly, settle their swing, and allow dropping between them',()=>{
+  const g=game('catch'),claw=g.one('.ex-claw'),initial=Number(claw.getAttribute('aria-valuenow'));
+  g.label('Move claw right').click();g.tick(16,16);
+  assert.ok(Number(claw.getAttribute('aria-valuenow'))>initial);assert.ok(Number(claw.getAttribute('aria-valuenow'))<initial+12);
+  assert.notEqual(claw.style['--claw-swing'],'0.00deg');
+  for(let t=32;t<2000;t+=16)g.tick(t,16);
+  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial+12);assert.ok(Math.abs(parseFloat(claw.style['--claw-swing']))<.05);
+  g.label('Move claw left').click();for(let t=2000;t<3000;t+=16)g.tick(t,16);
+  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial);
+  g.label('Drop claw').click();g.label('Move claw right').click();g.tick(3100,16);
+  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial);
 });
 test('random level targets and initial knobs are always separated and each puzzle can be dragged into place', () => {
   const variations = new Set();
@@ -306,7 +333,7 @@ test('a canceled final level drag cannot complete even with another pointer comm
 });
 test('catch requires moving the claw and a finished drop, locks position while dropping, and allows retries', () => {
   const g = game('catch'); const claw = g.one('.ex-claw'); const target = puzzles.generateLevels(() => 0, 1, 10, 90)[0].target;
-  assert.equal(g.all('button').length, 1);
+  assert.equal(g.all('button').length, 3);
   g.label('Drop claw').click(); claw.dispatch('keydown', { key: 'ArrowLeft' });
   claw.dispatch('pointerdown', { clientX: 60 }); assert.equal(claw.captured, undefined);
   g.tick(350); assert.equal(g.completions, 0);

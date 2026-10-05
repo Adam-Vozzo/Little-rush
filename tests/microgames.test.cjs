@@ -148,26 +148,17 @@ test('hatch waits for a chrysalis, ignores early taps and reports the butterfly 
   assertCompleteOnce(g);
 });
 
-test('break takes eight taps on a geode, cracks each hit and reveals crystals', () => {
-  const g = game('break');
-  const geode = g.one('.mg-geode');
-  assert.equal(g.all('button').length, 1);
-  assert.equal(g.all('.mg-geode-crack').length, 8);
-  for (let hits = 1; hits < 8; hits++) {
-    geode.click();
-    assert.equal(g.hint(), `${8 - hits} taps to reveal`);
-    assert.equal(g.completions, 0);
-    assert.equal(g.all('.mg-geode-crack').filter(crack => crack.style.opacity === '1').length, hits);
-    assert.equal(g.one('.mg-geode-crystals').style.opacity, hits >= 3 ? '1' : '0');
+test('break varies its tap count and shows every completed geode', () => {
+  const counts = new Set();
+  for (let seed = 0; seed < 100; seed++) {
+    const g = game('break', { random: seeded(seed * 800) }), geode = g.one('.mg-geode');
+    const count = Number(geode.getAttribute('aria-label').match(/geode (\d+) times/)[1]);
+    counts.add(count); assert.ok(count >= 5 && count <= 11);
+    for(let i=1;i<count;i++){geode.click();assert.equal(g.completions,0);}
+    geode.click();assert.ok(geode.classList.contains('is-open'));assertCompleteOnce(g);
   }
-  geode.click();
-  assert.equal(g.all('.mg-geode-crack').filter(crack => crack.style.opacity === '1').length, 8);
-  assert.ok(geode.classList.contains('is-open'));
-  assert.equal(g.completionPayload.kind, 'geode');
-  assert.equal(g.hint(), 'A little wonder inside');
-  assertCompleteOnce(g);
+  assert.equal(counts.size,7);
 });
-
 test('operation generates distinct answers, retries errors, and completes addition and subtraction', () => {
   const seen = new Set();
   for (let seed = 1; seed <= 100; seed++) {
@@ -250,23 +241,24 @@ test('sequence rejects wrong order and permits retry without losing progress', (
   assertCompleteOnce(g);
 });
 
-test('switch requires three unique activations', () => {
-  const g = game('switch');
-  const buttons = g.all('.mg-toggle');
-  buttons[0].click(); buttons[0].click(); buttons[1].click();
-  assert.equal(g.completions, 0);
-  assert.equal(g.feedback.length, 2);
-  buttons[2].click();
-  assert.equal(buttons.filter(button => button.getAttribute('aria-pressed') === 'true').length, 3);
-  assertCompleteOnce(g);
+test('six switches start partially on and all must be on together', () => {
+  for(let seed=1;seed<=40;seed++){
+    const g=game('switch',{random:seeded(seed)}),buttons=g.all('.mg-toggle');
+    assert.equal(buttons.length,6);
+    const on=buttons.filter(b=>b.getAttribute('aria-pressed')==='true');
+    assert.ok(on.length>=1&&on.length<=4);
+    on[0].click();assert.equal(on[0].getAttribute('aria-pressed'),'false');assert.equal(g.completions,0);
+    const off=buttons.filter(b=>b.getAttribute('aria-pressed')==='false');
+    off.slice(0,-1).forEach(b=>b.click());assert.equal(g.completions,0);off.at(-1).click();assertCompleteOnce(g);
+  }
 });
-
 test('simon ignores early input, flashes a pattern, replays mistakes, and accepts repetition', () => {
   const g = game('simon');
   const pink = g.label('Pink pattern button');
   const blue = g.label('Blue pattern button');
   pink.click();
   assert.equal(g.feedback.length, 0);
+  g.label('Start pattern').click();
   for (const flashAt of [220, 820, 1420]) {
     g.tick(flashAt, 100);
     assert.ok(pink.classList.contains('is-lit'));

@@ -80,7 +80,7 @@ class Element {
   }
 }
 
-function environment({ app = false, reducedMotion = false, saved = {}, calendarTime = new Date(2026, 9, 5, 12).getTime() } = {}) {
+function environment({ app = false, actualTiming = false, reducedMotion = false, saved = {}, calendarTime = new Date(2026, 9, 5, 12).getTime() } = {}) {
   const body = new Element('body');
   const ids = new Map();
   for (const match of fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8').matchAll(/\bid="([^"]+)"/g)) {
@@ -88,6 +88,7 @@ function environment({ app = false, reducedMotion = false, saved = {}, calendarT
   }
   const documentListeners = new Map(), windowListeners = new Map();
   const document = {
+    querySelectorAll: selector => body.querySelectorAll(selector),
     body, createElement: tag => new Element(tag),
     addEventListener(name, handler) { if (!documentListeners.has(name)) documentListeners.set(name, new Set()); documentListeners.get(name).add(handler); },
     getElementById(id) { return ids.get(id) ?? null; },
@@ -120,7 +121,7 @@ function environment({ app = false, reducedMotion = false, saved = {}, calendarT
     constructor(...args) { super(...(args.length ? args : [wallTime])); }
     static now() { return wallTime; }
   }
-  window.LittleRushEngine = class extends Engine { constructor(options) { super({ ...options, random: () => 0 }); engine = this; } };
+  window.LittleRushEngine = class extends Engine { constructor(options) { assert.equal(options.firstSpawnDelayMs,650); super({ ...options, firstSpawnDelayMs: actualTiming ? options.firstSpawnDelayMs : 0, random: () => 0 }); engine = this; } };
   const context = vm.createContext({ window, document, Date: CalendarDate, performance: { now: () => now }, localStorage: { getItem(key) { return storage.get(key) ?? null; }, setItem(key, value) { storage.set(key, String(value)); } }, requestAnimationFrame: callback => { nextFrame = callback; } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../butterfly.js'), 'utf8'), context);
   let habitat;
@@ -307,7 +308,7 @@ test('simultaneous tick completions do not remount cleared games from a stale re
   for (const mounted of automatic) mounted.onTick = () => { mounted.onTick = null; mounted.options.onComplete(); };
   env.advance(7600);
   assert.equal(env.engine.score, 3);
-  env.advance(7616);
+  env.advance(8080);
   assert.equal(env.mounts.filter(m => !m.options.demo && m.type === 'hold').length, 1);
   assert.equal(env.mounts.filter(m => !m.destroyed && !m.options.demo && ['upload', 'hold'].includes(m.type)).length, 0);
 });
@@ -338,21 +339,21 @@ test('filled pie countdown and microgame age use the same 25-second lifetime wit
   assert.equal(fill.getAttribute('d'), '');
 });
 
-test('geode reveal lasts 700ms while its engine slot is already free', () => {
+test('geode reveal reserves its slot for 880ms and cannot expire', () => {
   const env = environment({app: true});
   env.document.getElementById('start-button').click();
   env.engine.enqueueType('break'); env.advance(2500);
   const geode = env.mounts.find(m => !m.options.demo && m.type === 'break');
   env.complete('break'); env.advance(2516);
   assert.equal(env.engine.score, 1);
-  assert.equal(env.engine.snapshot(2516).tiles.some(tile => tile?.type === 'break'), false);
+  assert.equal(env.engine.snapshot(2516).tiles.some(tile => tile?.type === 'break' && tile.completedAt !== undefined), true);
   assert.equal(geode.destroyed, false);
-  assert.equal(env.board.querySelector('.geode-cleared').querySelector('.tile-timer').hidden, true);
-  env.advance(3199); assert.equal(geode.destroyed, false);
-  env.advance(3200); assert.equal(geode.destroyed, true);
+  assert.equal(env.board.querySelector('.is-solved').querySelector('.tile-timer').hidden, true);
+  env.advance(3379); assert.equal(geode.destroyed, false);
+  env.advance(3380); assert.equal(geode.destroyed, true);
 });
 
-test('a new scheduled spawn can replace the geode reveal immediately', () => {
+test('a new scheduled spawn respects the reserved geode completion beat', () => {
   const env = environment({app: true});
   env.document.getElementById('start-button').click();
   env.engine.enqueueType('break'); env.advance(2500);
@@ -360,8 +361,9 @@ test('a new scheduled spawn can replace the geode reveal immediately', () => {
   env.advance(4990); env.complete('break'); env.advance(4991);
   assert.equal(geode.destroyed, false);
   env.advance(5000);
-  assert.equal(geode.destroyed, true);
-  assert.equal(env.engine.snapshot(5000).tiles[1].type, 'wires');
+  assert.equal(geode.destroyed, false);
+  assert.equal(env.engine.snapshot(5000).tiles[1].type, 'break');
+  env.advance(5870); assert.equal(geode.destroyed,true);
 });
 
 test('title screen starts with records and no game previews, then exposes only the active play screen', () => {
@@ -566,11 +568,42 @@ test('Tweaks tabs support keyboard navigation without changing selections', () =
   target = dialog.querySelector('[data-action="games-tab"]');
   assert.equal(target.getAttribute('aria-selected'), 'true');
   dialog.dispatch('keydown', { target, key: 'End' });
-  target = dialog.querySelector('[data-action="styles-tab"]');
+  target = dialog.querySelector('[data-action="gameplay-tab"]');
   assert.equal(target.getAttribute('aria-selected'), 'true');
   dialog.dispatch('keydown', { target, key: 'ArrowLeft' });
+  assert.equal(dialog.querySelector('[data-action="styles-tab"]').getAttribute('aria-selected'), 'true');
+  dialog.dispatch('keydown', { target: dialog.querySelector('[data-action="styles-tab"]'), key: 'ArrowLeft' });
   assert.equal(dialog.querySelector('[data-action="games-tab"]').getAttribute('aria-selected'), 'true');
   assert.equal(dialog.querySelector('[data-game-toggle="maze"]').checked, false);
   assert.equal(env.storage.get('little-rush-disabled-games-v1'), saved);
   assert.deepEqual(env.themeCalls, ['flat']);
+});
+
+test('real app startup shows an empty board then a random first tile, and honors difficulty',()=>{
+  for(const [mode,spawn,expiry] of [['calm',3000,30000],['normal',2500,25000],['extreme',1500,15000]]){
+    const env=environment({app:true,actualTiming:true,saved:{'little-rush-difficulty':mode}});
+    env.document.getElementById('start-button').click();
+    assert.equal(env.engine.initialType,null);assert.equal(env.engine.snapshot(0).tiles.filter(Boolean).length,0);
+    env.advance(649);assert.equal(env.mounts.length,0);
+    env.advance(650);assert.equal(env.mounts.length,1);
+    assert.equal(env.engine.snapshot(650).tiles.find(Boolean).remainingMs,expiry);
+    env.advance(650+spawn);assert.equal(env.engine.snapshot(650+spawn).tiles.filter(Boolean).length,2);
+  }
+});
+
+test('Gameplay saves its scoring preference, changes the HUD, and keeps cleared count separately',()=>{
+  const env=environment({app:true});
+  env.document.getElementById('tweaks-button').click();env.action('gameplay-tab');
+  const dialog=env.document.getElementById('dialog-content');
+  dialog.dispatch('change',{target:{id:'time-based-points',checked:true}});
+  assert.equal(dialog.querySelector('.points-options').disabled,false);
+  dialog.dispatch('change',{target:{name:'points-preference',value:'late'}});
+  assert.deepEqual(JSON.parse(env.storage.get('little-rush-gameplay-v1')),{timeBasedPoints:true,pointsPreference:'late'});
+  env.action('close');env.document.getElementById('start-button').click();env.advance(5000);env.complete('press');env.advance(5016);
+  assert.equal(env.engine.score,1);assert.equal(env.engine.points,20);
+  assert.equal(env.document.getElementById('score').textContent,'20');
+  assert.equal(env.board.querySelector('.tile-points').textContent,'+20');
+  assert.equal(env.document.getElementById('hud-score').getAttribute('aria-label'),'Points scored');
+  const restored=environment({app:true,saved:Object.fromEntries(env.storage)});restored.document.getElementById('start-button').click();
+  assert.equal(restored.engine.scoringMode,'late');
 });

@@ -7,6 +7,7 @@
     { id: 'maze', title: 'DRAG TO EXIT', color: 'blue' },
     { id: 'sign', title: 'SIGN HERE', color: 'sage' },
     { id: 'memory', title: 'REMEMBER', color: 'lavender' },
+    { id: 'match', title: 'MATCH', color: 'sage' },
     { id: 'level', title: 'SLIDE TO MARKS', color: 'blue' },
     { id: 'catch', title: 'CATCH IT', color: 'sage' },
     { id: 'upload', title: 'UPLOAD', color: 'peach' },
@@ -85,8 +86,8 @@
       const side = tx < ty ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
       const along = tx < ty ? from[1] + dy * t : from[0] + dx * t;
       const fraction = along - Math.floor(along);
-      // Leave a little clearance for the visible dot around wall intersections.
-      if (fraction < .13 || fraction > .87) return result(true, beforeBoundary(t));
+      // The dot has a generous visual radius and a tiny collision core to avoid sticky corners.
+      if (fraction < .0001 || fraction > .9999) return result(true, beforeBoundary(t));
       const next = neighbor(current, side, puzzle.width, puzzle.height);
       if (next < 0 || !(puzzle.cells[current] & 1 << side) || !(puzzle.cells[next] & 1 << opposite(side))) return result(true, beforeBoundary(t));
       current = next; visited.push(current);
@@ -94,6 +95,20 @@
       lastBoundary = t;
     }
     return result(true);
+  }
+
+  function slideMazeSegment(puzzle, start, from, to) {
+    const first = traceMazeSegment(puzzle, start, from, to);
+    if (!first.blocked) return first;
+    let best = first;
+    // Try each wall tangent, taking the useful one without allowing a diagonal shortcut.
+    for (const target of [[to[0], first.point[1]], [first.point[0], to[1]]]) {
+      const next = traceMazeSegment(puzzle, first.cell, first.point, target);
+      if (Math.hypot(next.point[0] - to[0], next.point[1] - to[1]) < Math.hypot(best.point[0] - to[0], best.point[1] - to[1])) {
+        best = { ...next, blocked: true, visited: [...first.visited, ...next.visited], entries: [...first.entries, ...next.entries] };
+      }
+    }
+    return best;
   }
 
   const rotateMask = (mask, turns) => {
@@ -155,7 +170,7 @@
     });
   }
 
-  window.LittleRushPuzzles = { words, generateMaze, solveMaze, traceMazeSegment, generatePipes, pipesConnected, rotateMask, generateLevels };
+  window.LittleRushPuzzles = { words, generateMaze, solveMaze, traceMazeSegment, slideMazeSegment, generatePipes, pipesConnected, rotateMask, generateLevels };
 
   function mount(container, type, options = {}) {
     const { demo = false, random = Math.random, onComplete = () => {}, onFeedback = () => {} } = options;
@@ -266,7 +281,7 @@
         everMoved = true; change(next, 'keyboard'); onCommit(value, 'keyboard');
       });
       paint();
-      return { get value() { return value; }, get dragging() { return pointer !== null; }, get moved() { return everMoved; } };
+      return { get value() { return value; }, get dragging() { return pointer !== null; }, get moved() { return everMoved; }, nudgeTo(next) { if (!canMove() || pointer !== null) return; everMoved = true; change(next, 'control'); } };
     };
 
     if (type === 'roll') {
@@ -328,7 +343,7 @@
         cells.push(cell); maze.append(cell);
       });
       const overlay = node('div', 'ex-maze-overlay');
-      overlay.innerHTML = '<svg viewBox="0 0 5 5" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path class="ex-maze-ink" stroke="#b96869" stroke-width=".075" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/><circle class="ex-maze-dot" r=".17" fill="#b96869"/></svg>';
+      overlay.innerHTML = '<svg viewBox="0 0 5 5" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path class="ex-maze-ink" stroke="#b96869" stroke-width=".075" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/><circle class="ex-maze-dot" r=".34" fill="#b96869" stroke="#fff8ed" stroke-width=".07"/></svg>';
       const mazeInk = overlay.querySelector('.ex-maze-ink'), mazeDot = overlay.querySelector('.ex-maze-dot');
       maze.append(overlay);
       const paintDot = point => {
@@ -363,7 +378,7 @@
       const point = event => [(event.clientX - geometry.left) / geometry.width * puzzle.width, (event.clientY - geometry.top) / geometry.height * puzzle.height];
       const drag = event => {
         const raw = point(event), nextPoint = [raw[0] + grabOffset[0], raw[1] + grabOffset[1]];
-        const traced = traceMazeSegment(puzzle, current, dotPoint, nextPoint);
+        const traced = slideMazeSegment(puzzle, current, dotPoint, nextPoint);
         for (const cell of traced.visited) {
           updatePosition(cell);
           if (current === puzzle.end) {
@@ -373,7 +388,7 @@
         }
         paintDot(traced.point);
         if (traced.blocked) {
-          if (!wallContact) error();
+          // Wall contact is ordinary movement, not a failed action.
           wallContact = true; hint.textContent = 'Keep drawing along an open passage';
         } else { wallContact = false; hint.textContent = 'Drag the dot to □'; }
       };
@@ -382,7 +397,7 @@
         const first = cells[0].getBoundingClientRect(), last = cells[cells.length - 1].getBoundingClientRect();
         geometry = { left: first.left, top: first.top, width: last.left + last.width - first.left, height: last.top + last.height - first.top };
         const start = point(event);
-        if (!start.every(Number.isFinite) || Math.hypot(start[0] - dotPoint[0], start[1] - dotPoint[1]) > .65) { geometry = null; return; }
+        if (!start.every(Number.isFinite) || Math.hypot(start[0] - dotPoint[0], start[1] - dotPoint[1]) > .95) { geometry = null; return; }
         event.preventDefault(); pointer = event.pointerId; grabOffset = [dotPoint[0] - start[0], dotPoint[1] - start[1]]; wallContact = false;
         hint.textContent = 'Drag the dot to □'; maze.classList.add('is-dragging'); capture(maze, event);
       });
@@ -467,87 +482,137 @@
       body.append(paper);
       hint.textContent = 'Draw any signature, then release';
     } else if (type === 'memory') {
-      const code = demo ? '425' : Array.from({ length: 3 }, () => integer(1, 6)).join('');
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      const numbers = '23456789';
+      const symbols = shuffle([pick(random, [...alphabet]), pick(random, [...numbers]), ...shuffle([...alphabet + numbers]).slice(0, 4)]).slice(0, 6);
+      // Guarantee a mixed code even for a degenerate random source.
+      const code = demo ? 'A7K3B' : shuffle([pick(random, symbols.filter(c => /[A-Z]/.test(c))) || 'A', pick(random, symbols.filter(c => /[0-9]/.test(c))) || '7', ...Array.from({ length: 3 }, () => pick(random, symbols))]).join('');
+      const choices = shuffle([...new Set([...code, ...symbols])]).slice(0, 6);
       let visible = true, entered = '';
       const display = node('div', 'ex-memory-code', code);
       const keys = node('div', 'ex-mini-keys');
-      const digits = [];
-      const enter = digit => {
+      keys.hidden = true;
+      const start = button('ex-key ex-memory-start', 'Start recall', 'Start', () => {
+        visible = false; entered = ''; display.textContent = '·····';
+        start.hidden = true; keys.hidden = false; hint.textContent = 'Enter the five characters'; feedback();
+      });
+      const enter = character => {
         if (visible) return;
-        if (digit !== code[entered.length]) {
-          error(); entered = ''; visible = true; revealUntil = age + 900;
-          display.textContent = code;
-          digits.forEach(key => { key.disabled = true; });
-          hint.textContent = 'Look once more';
-          return;
+        if (character !== code[entered.length]) {
+          error(); entered = ''; visible = true; display.textContent = code;
+          keys.hidden = true; start.hidden = false; hint.textContent = 'Look once more, then press Start'; return;
         }
-        entered += digit;
-        display.textContent = entered.padEnd(3, '·');
-        feedback();
+        entered += character; display.textContent = entered.padEnd(5, '·'); feedback();
         if (entered.length === code.length) finish();
       };
-      for (let i = 1; i <= 6; i++) {
-        const key = button('ex-key', `Recall ${i}`, i, () => enter(String(i)));
-        key.disabled = true;
-        digits.push(key); keys.append(key);
-      }
-      let revealUntil = 1400;
-      tickers.push(() => {
-        if (visible && age >= revealUntil) {
-          visible = false; display.textContent = '···'; hint.textContent = 'Recall the 3 digits';
-          digits.forEach(key => { key.disabled = false; });
+      choices.forEach(character => keys.append(button('ex-key', 'Recall ' + character, character, () => enter(character))));
+      listen(root, 'keydown', event => {
+        const character = event.key.toUpperCase();
+        if (choices.includes(character)) { event.preventDefault(); enter(character); }
+      });
+      body.append(display, start, keys); hint.textContent = 'Remember the code, then press Start';
+    } else if (type === 'match') {
+      const shapes = [
+        ['circle', '<circle cx="50" cy="50" r="30" fill="currentColor"/>'],
+        ['triangle', '<path d="M50 17 84 78H16Z" fill="currentColor" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>'],
+        ['square', '<rect x="22" y="22" width="56" height="56" rx="8" fill="currentColor"/>']
+      ];
+      const colors = [['coral', '#b95260'], ['blue', '#427d9e'], ['green', '#548453']];
+      const pool = shapes.flatMap((shape, si) => colors.map((color, ci) => ({ shape, color, id: si * 3 + ci })));
+      const target = pool[demo ? 0 : integer(0, 8)];
+      const items = shuffle(pool);
+      const row = node('div', 'ex-match-row');
+      const icon = item => {
+        const el = node('div', 'ex-match-shape'); el.style.color = item.color[1]; el.innerHTML = svg(item.shape[1]);
+        el.setAttribute('role', 'img'); el.setAttribute('aria-label', item.color[0] + ' ' + item.shape[0]); return el;
+      };
+      const reference = icon(target), equals = node('span', 'ex-match-equals', '=');
+      const reel = node('div', 'ex-match-window'), strip = node('div', 'ex-match-strip');
+      [...items, items[0]].forEach(item => strip.append(icon(item))); reel.append(strip);
+      row.append(reference, equals, reel);
+      let position = 0, retryAt = null, offset = 0;
+      const stop = button('ex-key ex-match-stop', 'Stop on the matching colored shape', 'Stop', () => {
+        if (retryAt !== null) return;
+        const index = Math.round(position) % items.length;
+        if (Math.abs(position - Math.round(position)) <= .34 && items[index].id === target.id) {
+          strip.style.transform = 'translateY(-' + Math.round(position) * 100 / (items.length + 1) + '%)';
+          reel.classList.add('is-matched'); stop.textContent = 'Matched'; feedback(); finish();
+        } else {
+          retryAt = age + 500; stop.textContent = 'Try again'; error();
         }
       });
-      listen(root, 'keydown', event => {
-        if (/^[1-6]$/.test(event.key)) { event.preventDefault(); enter(event.key); }
+      body.append(row, stop); hint.textContent = 'Match both the shape and its color';
+      tickers.push(() => {
+        if (retryAt !== null) {
+          if (age < retryAt) return;
+          offset += 500; retryAt = null; stop.textContent = 'Stop';
+        }
+        position = ((age - offset) / 620) % items.length;
+        strip.style.transform = 'translateY(-' + position * 100 / (items.length + 1) + '%)';
+        reel.setAttribute('aria-label', 'Scrolling: ' + items[Math.round(position) % items.length].color[0] + ' ' + items[Math.round(position) % items.length].shape[0]);
       });
-      body.append(display, keys);
-      hint.textContent = 'Remember these digits';
     } else if (type === 'level') {
       const levels = node('div', 'ex-levels');
       const matched = [false, false, false], touched = [false, false, false];
       generateLevels(random).forEach(({ target, initial }, index) => {
         const row = node('div', 'ex-level-row');
-        const label = node('span', 'ex-level-label', String(target));
         const track = node('div', 'ex-level-track');
         const mark = node('span', 'ex-level-mark');
         mark.style.left = `${target}%`;
         const slider = node('div', 'ex-level-slider ex-slider-thumb');
         const update = (value, committed = false) => {
-          const near = Math.abs(value - target) <= 4;
+          const near = Math.abs(value - target) <= 9;
           if (committed) touched[index] = true;
           matched[index] = touched[index] && near;
           row.classList.toggle('is-matched', near);
         };
         slidingControl({
           track, handle: slider, initial, label: `Drag level ${index + 1} to ${target}`,
-          describe: value => `${Math.round(value)}; target ${target}${Math.abs(value - target) <= 4 ? ', aligned' : ''}`,
+          describe: value => `${Math.round(value)}; target ${target}${Math.abs(value - target) <= 9 ? ', aligned' : ''}`,
           onChange: (value, source) => {
             update(value);
             if (source === 'pointer') matched[index] = false;
           },
           onCommit: value => { update(value, true); feedback(); if (matched.every(Boolean)) finish(); },
         });
-        track.append(mark, slider); row.append(label, track); levels.append(row);
+        track.append(mark, slider); row.append(track); levels.append(row);
       });
       body.append(levels);
       hint.textContent = 'Slide knobs to marks';
     } else if (type === 'catch') {
       let dropAt = null;
+      let motionTarget = null, swing = 0, swingVelocity = 0;
       const { target, initial } = generateLevels(random, 1, 10, 90)[0];
       const machine = node('div', 'ex-catch-machine');
       const targetEl = node('span', 'ex-catch-prize', '✿');
       const claw = node('div', 'ex-claw ex-slider-thumb');
       claw.innerHTML = svg('<path d="M50 0v32m0 0L28 58l8 12m14-38 22 26-8 12" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="33" y="0" width="34" height="22" rx="4" fill="#fff8e9"/>');
       targetEl.style.left = `${target}%`;
-      const slider = slidingControl({ track: machine, handle: claw, initial, label: 'Drag the claw over the flower', describe: value => `${Math.round(value)}%; flower at ${target}%`, canMove: () => dropAt === null });
+      const slider = slidingControl({ track: machine, handle: claw, initial, label: 'Drag the claw over the flower', describe: value => `${Math.round(value)}%; flower at ${target}%`, canMove: () => dropAt === null,
+        onChange: (value, source) => { if (source === 'pointer' || source === 'keyboard') motionTarget = null; } });
       const controls = node('div', 'ex-catch-controls');
       const drop = () => {
         if (dropAt !== null || slider.dragging) return;
+        motionTarget = null;
         dropAt = age; feedback(); claw.classList.add('is-dropping');
       };
-      controls.append(button('ex-key ex-drop', 'Drop claw', 'DROP', drop));
-      tickers.push(() => {
+      const moveClaw = direction => {
+        if (dropAt !== null || slider.dragging) return;
+        motionTarget = clamp((motionTarget ?? slider.value) + direction * 12, 0, 100);
+        swingVelocity -= direction * 45; feedback();
+      };
+      controls.append(button('ex-key ex-claw-arrow', 'Move claw left', '←', () => moveClaw(-1)), button('ex-key ex-drop', 'Drop claw', 'DROP', drop), button('ex-key ex-claw-arrow', 'Move claw right', '→', () => moveClaw(1)));
+      tickers.push(delta => {
+        const dt = Math.min(delta, 32) / 1000;
+        if (motionTarget !== null && !slider.dragging) {
+          const distance = motionTarget - slider.value;
+          slider.nudgeTo(Math.abs(distance) < .1 ? motionTarget : slider.value + distance * (1 - Math.exp(-dt * 15)));
+          if (Math.abs(distance) < .1) motionTarget = null;
+        }
+        swingVelocity += (-swing * 110 - swingVelocity * 9) * dt;
+        swing = clamp(swing + swingVelocity * dt, -9, 9);
+        if (Math.abs(swing) + Math.abs(swingVelocity) < .03) swing = swingVelocity = 0;
+        claw.style.setProperty('--claw-swing', `${swing.toFixed(2)}deg`);
         if (dropAt === null || age - dropAt < 350) return;
         if (slider.moved && Math.abs(slider.value - target) <= 7) { targetEl.classList.add('is-caught'); finish(); }
         else { dropAt = null; claw.classList.remove('is-dropping'); error(); }

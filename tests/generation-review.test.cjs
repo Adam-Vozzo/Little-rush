@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 class Element {
   constructor(tag) {
-    this.tagName = tag; this.children = []; this.className = ''; this.attributes = {}; this.style = {}; this.events = new Map();
+    this.tagName = tag; this.children = []; this.className = ''; this.attributes = {}; this.style = { setProperty(name,value) { this[name] = value; } }; this.events = new Map();
     this.classList = {
       contains: value => this.className.split(/\s+/).includes(value),
       add: (...values) => { this.className += ` ${values.join(' ')}`; },
@@ -196,7 +196,11 @@ test('independent review: diagonal corner cuts and re-grabbing another cell cann
     assert.equal(g.current(), g.maze.start);
     g.grid.fire('pointerdown', g.at(g.maze.start));
     g.grid.fire('pointermove', g.at(diagonal));
-    assert.equal(g.current(), g.maze.start);
+    assert.notEqual(g.current(), diagonal);
+    if(g.current()!==g.maze.start){
+      const side=[[0,-1],[1,0],[0,1],[-1,0]].findIndex(([dx,dy])=>g.maze.start%g.maze.width+dx===g.current()%g.maze.width&&Math.floor(g.maze.start/g.maze.width)+dy===Math.floor(g.current()/g.maze.width));
+      assert.ok(side>=0 && (g.maze.cells[g.maze.start] & (1<<side)));
+    }
     assert.equal(g.grid.captured, 1);
     assert.equal(g.completions, 0);
     g.grid.fire('pointermove', g.at(g.maze.start));

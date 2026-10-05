@@ -126,3 +126,19 @@
   .mg-stop-dot { width: 17px; height: 17px; top: -3.5px; }
 }
 @media (prefers-reduced-motion: reduce) { .mg-hatch-button.is-ready svg, .mg-geode.is-open .mg-geode-spark { animation: none; } }
+
+/* Short horizontal switches in two columns of three. */
+.mg-switches{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:3px 8px;padding:1px 5px}
+.mg-toggle{width:100%;height:100%;min-height:0;border-radius:8px}
+.mg-toggle-track{width:clamp(42px,34cqw,68px);height:clamp(22px,16cqw,32px);border-radius:30px;max-height:95%}
+.mg-toggle-knob{left:3px;top:3px;bottom:auto;width:auto;height:calc(100% - 6px);aspect-ratio:1;transition:left .18s cubic-bezier(.2,.8,.25,1),translate .18s cubic-bezier(.2,.8,.25,1)}
+.mg-toggle.is-on .mg-toggle-knob{left:calc(100% - 3px);bottom:auto;translate:-100% 0}
+.mg-simon .mg-body{display:grid;grid-template-rows:minmax(0,1fr) 7px;justify-items:center;gap:4px}
+.mg-simon-board{position:relative;flex:none;width:auto;height:100%;aspect-ratio:1;max-width:100%;border-radius:50%;gap:4px;overflow:hidden}
+.mg-simon-pad:nth-child(n){border-radius:0}.mg-simon-start{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:43%;height:43%;border-radius:50%;background:#fffaf0;box-shadow:0 0 0 4px var(--lavender);font-size:clamp(10px,8cqw,16px)!important;font-weight:550!important;z-index:2}
+.mg-simon-start:not(:disabled):active{transform:translate(-50%,-50%) scale(.94)}.mg-simon-start:disabled{opacity:1;color:#74816c}
+.mg-stop .mg-body{gap:5px;padding:0 3px 3px}.mg-stop-top{flex-basis:43%}
+.mg-stop-button{width:100%;margin:0;border-radius:10px;box-shadow:inset 0 1px 0 #fff8,0 2px 0 #55704c24;transition:background .12s,translate .12s}
+.mg-stop-button:not(:disabled):active{translate:0 1px;box-shadow:inset 0 1px 2px #55704c18}
+.mg-wire-prompt{font-weight:500;font-size:clamp(18px,13cqw,27px)}.mg-cut-wire text{font-size:16px;font-weight:450}
+.mg button{transition:background .14s,opacity .16s,box-shadow .16s,transform .12s}

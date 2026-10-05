@@ -5,6 +5,39 @@ const Engine = require('../engine.js');
 const make = options => new Engine({ types: ['press', 'switch', 'sequence'], random: () => 0, ...options });
 const populated = snapshot => snapshot.tiles.filter(Boolean);
 
+test('scoring rewards the selected timing, uses actual expiry, and never pays twice', () => {
+  for (const lifetime of [15000,25000,30000]) for (const mode of ['fast','late']) {
+    const e = make({types:['one'], tileLifetimeMs:lifetime, spawnIntervalMs:lifetime*2, scoringMode:mode});
+    const tile=populated(e.start(0))[0];
+    assert.equal(e.complete(tile.id,lifetime*.2,720),true);
+    assert.equal(e.snapshot(lifetime*.2).points,mode==='fast'?80:20);
+    assert.equal(e.complete(tile.id,lifetime*.2+1,720),false);
+    assert.equal(e.score,1);
+    assert.equal(e.snapshot(lifetime*.2+1).points,mode==='fast'?80:20);
+    e.start(lifetime*3);assert.equal(e.points,0);
+  }
+});
+
+test('a last-moment clear keeps its settled state beyond its original deadline', () => {
+  const e=make({types:['one'],spawnIntervalMs:30000,scoringMode:'late'});
+  const tile=populated(e.start(0))[0];
+  assert.equal(e.complete(tile.id,24999,720),true);
+  assert.equal(e.points,100);
+  assert.equal(e.tick(25001).status,'running');
+  assert.equal(populated(e.snapshot(25001))[0].releaseInMs,718);
+  assert.equal(populated(e.tick(25718)).length,1);
+  assert.equal(populated(e.tick(25719)).length,0);
+  e.start(30000);assert.equal(e.complete(populated(e.snapshot(30000))[0].id,55000,720),false);assert.equal(e.points,0);
+});
+
+test('paused time changes neither awarded points nor the completion beat', () => {
+  const e=make({types:['one'],spawnIntervalMs:50000,scoringMode:'fast'});
+  const tile=populated(e.start(0))[0];e.pause(5000);e.resume(25000);
+  e.complete(tile.id,25000,720);assert.equal(e.points,80);
+  e.pause(25100);assert.equal(populated(e.snapshot(90000))[0].releaseInMs,620);
+  e.resume(90000);assert.equal(populated(e.tick(90619)).length,1);assert.equal(populated(e.tick(90620)).length,0);
+});
+
 test('starts with one tile; adds a tile every 2.5 seconds into an empty slot', () => {
   const engine = make();
   assert.equal(engine.snapshot(0).status, 'idle');
