@@ -8,6 +8,7 @@
     { id: 'sign', title: 'SIGN HERE', color: 'sage' },
     { id: 'memory', title: 'REMEMBER', color: 'lavender' },
     { id: 'match', title: 'MATCH', color: 'sage' },
+    { id: 'aim', title: 'TAP TARGETS', color: 'sage' },
     { id: 'level', title: 'SLIDE TO MARKS', color: 'blue' },
     { id: 'catch', title: 'CATCH IT', color: 'sage' },
     { id: 'upload', title: 'UPLOAD', color: 'peach' },
@@ -98,17 +99,24 @@
   }
 
   function slideMazeSegment(puzzle, start, from, to) {
-    const first = traceMazeSegment(puzzle, start, from, to);
-    if (!first.blocked) return first;
-    let best = first;
-    // Try each wall tangent, taking the useful one without allowing a diagonal shortcut.
-    for (const target of [[to[0], first.point[1]], [first.point[0], to[1]]]) {
-      const next = traceMazeSegment(puzzle, first.cell, first.point, target);
-      if (Math.hypot(next.point[0] - to[0], next.point[1] - to[1]) < Math.hypot(best.point[0] - to[0], best.point[1] - to[1])) {
-        best = { ...next, blocked: true, visited: [...first.visited, ...next.visited], entries: [...first.entries, ...next.entries] };
+    let result = traceMazeSegment(puzzle, start, from, to);
+    if (!result.blocked || ![...from, ...to].every(Number.isFinite)) return result;
+    // Resolve the remaining motion after each wall contact, including a turn at
+    // the end of that wall. A tiny interior margin keeps exact corners traversable.
+    for (let pass = 0; pass < 8; pass++) {
+      const x = result.cell % puzzle.width, y = Math.floor(result.cell / puzzle.width);
+      const origin = [clamp(result.point[0], x + .02, x + .98), clamp(result.point[1], y + .02, y + .98)];
+      let best = null, distance = Math.hypot(result.point[0] - to[0], result.point[1] - to[1]);
+      for (const target of [[to[0], origin[1]], [origin[0], to[1]]]) {
+        const next = traceMazeSegment(puzzle, result.cell, origin, target);
+        const remaining = Math.hypot(next.point[0] - to[0], next.point[1] - to[1]);
+        if (remaining < distance - .001) { best = next; distance = remaining; }
       }
+      if (!best) break;
+      result = { ...best, blocked: true, visited: [...result.visited, ...best.visited], entries: [...result.entries, {cell: result.cell, point: origin}, ...best.entries, {cell: best.cell, point: best.point}] };
+      if (distance < .001) break;
     }
-    return best;
+    return result;
   }
 
   const rotateMask = (mask, turns) => {
@@ -175,7 +183,7 @@
   function mount(container, type, options = {}) {
     const { demo = false, random = Math.random, onComplete = () => {}, onFeedback = () => {} } = options;
     let done = false, destroyed = false, age = 0, errorUntil = 0;
-    const removers = [], tickers = [], captures = new Map();
+    const removers = [], tickers = [], suspenders = [], captures = new Map();
     const node = (tag, cls, text) => {
       const el = document.createElement(tag);
       if (cls) el.className = cls;
@@ -530,27 +538,97 @@
       const reel = node('div', 'ex-match-window'), strip = node('div', 'ex-match-strip');
       [...items, items[0]].forEach(item => strip.append(icon(item))); reel.append(strip);
       row.append(reference, equals, reel);
-      let position = 0, retryAt = null, offset = 0;
-      const stop = button('ex-key ex-match-stop', 'Stop on the matching colored shape', 'Stop', () => {
-        if (retryAt !== null) return;
+      let position = 0, retryAt = 0;
+      const attempt = () => {
+        if (age < retryAt) return;
         const index = Math.round(position) % items.length;
         if (Math.abs(position - Math.round(position)) <= .34 && items[index].id === target.id) {
           strip.style.transform = 'translateY(-' + Math.round(position) * 100 / (items.length + 1) + '%)';
           reel.classList.add('is-matched'); stop.textContent = 'Matched'; feedback(); finish();
         } else {
-          retryAt = age + 500; stop.textContent = 'Try again'; error();
+          retryAt = age + 750; stop.disabled = true; root.classList.add('is-cooling');
+          stop.textContent = '0.8'; hint.textContent = 'Missed · try again in a moment'; error();
         }
+      };
+      const stop = button('ex-key ex-match-stop', 'Stop on the matching colored shape', 'Stop', attempt);
+      // The whole tile is a stop target, including its title and margins. The
+      // actual button retains keyboard access without handling its click twice.
+      listen(container.closest?.('.tile') || root, 'click', event => {
+        if (event.target === stop || event.target?.closest?.('.ex-match-stop')) return;
+        attempt();
       });
-      body.append(row, stop); hint.textContent = 'Match both the shape and its color';
+      body.append(row, stop); hint.textContent = 'Tap anywhere · match shape and color';
       tickers.push(() => {
-        if (retryAt !== null) {
-          if (age < retryAt) return;
-          offset += 500; retryAt = null; stop.textContent = 'Stop';
-        }
-        position = ((age - offset) / 620) % items.length;
+        const cooling = age < retryAt;
+        stop.disabled = cooling; root.classList.toggle('is-cooling', cooling);
+        stop.textContent = cooling ? ((retryAt - age) / 1000).toFixed(1) : 'Stop';
+        position = (age / 620) % items.length;
         strip.style.transform = 'translateY(-' + position * 100 / (items.length + 1) + '%)';
         reel.setAttribute('aria-label', 'Scrolling: ' + items[Math.round(position) % items.length].color[0] + ' ' + items[Math.round(position) % items.length].shape[0]);
       });
+    } else if (type === 'aim') {
+      let startedAt = null, spawned = 0, hits = 0, lastPosition = null;
+      const field = node('div', 'ex-aim-field'), progress = node('div', 'ex-aim-progress');
+      const dots = Array.from({length: 6}, () => node('span'));
+      progress.append(...dots); progress.setAttribute('aria-label', '0 of 6 targets');
+      const targets = [];
+      const start = button('ex-key ex-aim-start', 'Start aim trainer', 'Start', () => {
+        if (startedAt !== null) return;
+        startedAt = age; spawned = hits = 0; start.hidden = true;
+        progress.setAttribute('aria-label', '0 of 6 targets');
+        dots.forEach(dot => dot.classList.remove('is-done')); feedback();
+        hint.textContent = 'Tap each circle when it fills'; update();
+      });
+      const reset = () => {
+        startedAt = null; targets.splice(0).forEach(target => target.el.remove());
+        start.hidden = false; start.textContent = 'Try again';
+        progress.setAttribute('aria-label', 'Missed target. Start again.');
+        dots.forEach(dot => dot.classList.remove('is-done'));
+        hint.textContent = 'Missed one · press Start to retry'; error();
+      };
+      const spawn = born => {
+        // Select from spaced positions so the emerging circle never covers the
+        // one currently ready. Jitter keeps repeated rounds from feeling fixed.
+        const positions = [22, 50, 78].flatMap(x => [25, 75].map(y => [x, y]));
+        const available = positions.filter(p => !lastPosition || Math.hypot(p[0] - lastPosition[0], p[1] - lastPosition[1]) >= 48);
+        const position = pick(random, available); lastPosition = position;
+        const target = {born, hit: false, el: null};
+        const tap = () => {
+          if (startedAt === null || !targets.includes(target) || target.hit || age < born + 500) return;
+          if (age >= born + 1000) { reset(); return; }
+          target.hit = true; hits++; target.el.disabled = true;
+          target.el.classList.add('is-hit'); dots[hits - 1].classList.add('is-done');
+          progress.setAttribute('aria-label', hits + ' of 6 targets'); feedback();
+          if (hits === 6) { hint.textContent = 'All six!'; finish(); }
+        };
+        const el = button('ex-aim-target', 'Target ' + (spawned + 1), '', tap);
+        el.innerHTML = '<span class="ex-aim-core"></span>';
+        el.style.left = (position[0] + (random() - .5) * 4) + '%';
+        el.style.top = (position[1] + (random() - .5) * 4) + '%';
+        target.el = el; targets.push(target); field.append(el); spawned++;
+        // Pointer-down makes the half-second window feel immediate; keyboard
+        // and assistive clicks share the same guarded hit path.
+        listen(el, 'pointerdown', event => { if (event.button > 0) return; event.preventDefault(); tap(); });
+      };
+      const update = () => {
+        if (startedAt === null) return;
+        if (targets.some(target => !target.hit && age >= target.born + 1000)) { reset(); return; }
+        while (spawned < 6 && age >= startedAt + spawned * 500) spawn(startedAt + spawned * 500);
+        // A delayed frame must not make an expired target newly playable.
+        if (targets.some(target => !target.hit && age >= target.born + 1000)) { reset(); return; }
+        targets.forEach(target => {
+          const growth = clamp((age - target.born) / 500, 0, 1);
+          target.el.classList.toggle('is-ready', growth === 1);
+          target.el.setAttribute('aria-disabled', String(growth < 1 || target.hit));
+          if (!target.hit) {
+            target.el.style.opacity = String(growth);
+            target.el.style.transform = 'translate(-50%,-50%) scale(' + (.35 + .65 * (1 - (1 - growth) ** 3)) + ')';
+          }
+          if (target.hit && age >= target.born + 1000) target.el.remove();
+        });
+      };
+      field.append(start); body.append(field, progress); hint.textContent = 'Start · tap six circles as they fill';
+      tickers.push(update);
     } else if (type === 'level') {
       const levels = node('div', 'ex-levels');
       const matched = [false, false, false], touched = [false, false, false];
@@ -580,45 +658,90 @@
       body.append(levels);
       hint.textContent = 'Slide knobs to marks';
     } else if (type === 'catch') {
-      let dropAt = null;
-      let motionTarget = null, swing = 0, swingVelocity = 0;
+      let dropAt = null, held = null, swing = 0, swingVelocity = 0, previousVelocity = 0;
+      let travel = 0, caught = false, grabbed = false;
       const { target, initial } = generateLevels(random, 1, 10, 90)[0];
+      let previousPosition = initial;
       const machine = node('div', 'ex-catch-machine');
       const targetEl = node('span', 'ex-catch-prize', '✿');
+      const rod = node('span', 'ex-claw-rod');
       const claw = node('div', 'ex-claw ex-slider-thumb');
       claw.innerHTML = svg('<path d="M50 0v32m0 0L28 58l8 12m14-38 22 26-8 12" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="33" y="0" width="34" height="22" rx="4" fill="#fff8e9"/>');
       targetEl.style.left = `${target}%`;
-      const slider = slidingControl({ track: machine, handle: claw, initial, label: 'Drag the claw over the flower', describe: value => `${Math.round(value)}%; flower at ${target}%`, canMove: () => dropAt === null,
-        onChange: (value, source) => { if (source === 'pointer' || source === 'keyboard') motionTarget = null; } });
+      const slider = slidingControl({ track: machine, handle: claw, initial, label: 'Drag the claw over the flower', describe: value => `${Math.round(value)}%; flower at ${target}%`, canMove: () => dropAt === null && !held });
       const controls = node('div', 'ex-catch-controls');
+      const stopMoving = () => {
+        if (!held) return;
+        const control = held.control; held = null;
+        control.classList.remove('is-held'); release(control);
+      };
+      suspenders.push(stopMoving);
       const drop = () => {
         if (dropAt !== null || slider.dragging) return;
-        motionTarget = null;
-        dropAt = age; feedback(); claw.classList.add('is-dropping');
+        stopMoving(); dropAt = age; grabbed = caught = false;
+        travel = Math.max(0, machine.getBoundingClientRect().height - (claw.clientHeight || claw.getBoundingClientRect().height) * .7 - targetEl.getBoundingClientRect().height * .45);
+        controls.querySelectorAll('button').forEach(control => { control.disabled = true; });
+        feedback(); claw.classList.add('is-dropping');
       };
-      const moveClaw = direction => {
-        if (dropAt !== null || slider.dragging) return;
-        motionTarget = clamp((motionTarget ?? slider.value) + direction * 12, 0, 100);
-        swingVelocity -= direction * 45; feedback();
+      const arrow = (direction, label, text) => {
+        const control = button('ex-key ex-claw-arrow', label, text, event => {
+          // Screen readers issue a click without a pointer or held key.
+          if (event.detail === 0 && !held && dropAt === null && !slider.dragging) { slider.nudgeTo(slider.value + direction * 2); feedback(); }
+        });
+        const begin = (pointer, key) => {
+          if (held || dropAt !== null || slider.dragging) return false;
+          slider.nudgeTo(slider.value + direction * 2);
+          held = {control, direction, pointer, key, since: age};
+          control.classList.add('is-held'); feedback(); return true;
+        };
+        listen(control, 'pointerdown', event => {
+          if (event.button > 0) return;
+          event.preventDefault(); if (begin(event.pointerId, null)) capture(control, event);
+        });
+        for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) listen(control, eventName, event => {
+          if (held?.control === control && held.pointer === event.pointerId) { event.preventDefault(); stopMoving(); }
+        });
+        listen(control, 'keydown', event => {
+          if (![' ', 'Enter'].includes(event.key)) return;
+          event.preventDefault(); if (!event.repeat) begin(null, event.key);
+        });
+        listen(control, 'keyup', event => { if (held?.control === control && held.key === event.key) { event.preventDefault(); stopMoving(); } });
+        listen(control, 'blur', stopMoving);
+        return control;
       };
-      controls.append(button('ex-key ex-claw-arrow', 'Move claw left', '←', () => moveClaw(-1)), button('ex-key ex-drop', 'Drop claw', 'DROP', drop), button('ex-key ex-claw-arrow', 'Move claw right', '→', () => moveClaw(1)));
+      controls.append(arrow(-1, 'Move claw left', '←'), button('ex-key ex-drop', 'Drop claw', 'DROP', drop), arrow(1, 'Move claw right', '→'));
       tickers.push(delta => {
         const dt = Math.min(delta, 32) / 1000;
-        if (motionTarget !== null && !slider.dragging) {
-          const distance = motionTarget - slider.value;
-          slider.nudgeTo(Math.abs(distance) < .1 ? motionTarget : slider.value + distance * (1 - Math.exp(-dt * 15)));
-          if (Math.abs(distance) < .1) motionTarget = null;
+        if (held && dropAt === null) {
+          const speed = 46 * (1 - Math.exp(-Math.max(0, age - held.since - 120) / 130));
+          // The slider's direct manipulation lock does not apply to its owner.
+          const owner = held; held = null; slider.nudgeTo(slider.value + owner.direction * speed * dt); held = owner;
         }
-        swingVelocity += (-swing * 110 - swingVelocity * 9) * dt;
-        swing = clamp(swing + swingVelocity * dt, -9, 9);
+        const velocity = dt ? clamp((slider.value - previousPosition) / dt, -65, 65) : 0;
+        swingVelocity -= (velocity - previousVelocity) * .65;
+        previousPosition = slider.value; previousVelocity = velocity;
+        swingVelocity += (-swing * 85 - swingVelocity * 5.5) * dt;
+        swing = clamp(swing + swingVelocity * dt, -12, 12);
         if (Math.abs(swing) + Math.abs(swingVelocity) < .03) swing = swingVelocity = 0;
         claw.style.setProperty('--claw-swing', `${swing.toFixed(2)}deg`);
-        if (dropAt === null || age - dropAt < 350) return;
-        if (slider.moved && Math.abs(slider.value - target) <= 7) { targetEl.classList.add('is-caught'); finish(); }
-        else { dropAt = null; claw.classList.remove('is-dropping'); error(); }
+        rod.style.left = claw.style.left;
+        if (dropAt === null) return;
+        const elapsed = age - dropAt, ease = t => t * t * (3 - 2 * t);
+        const depth = ease(clamp(elapsed / 700, 0, 1)) * (1 - ease(clamp((elapsed - 850) / 600, 0, 1))) * travel;
+        claw.style.top = depth + 'px'; rod.style.height = (depth + 8) + 'px';
+        if (elapsed >= 700 && !grabbed) {
+          grabbed = true; caught = slider.moved && Math.abs(slider.value - target) <= 7;
+          if (caught) { targetEl.classList.add('is-held'); feedback(); }
+        }
+        if (caught) targetEl.style.translate = '0 ' + (depth - travel) + 'px';
+        if (elapsed < 1450) return;
+        claw.classList.remove('is-dropping');
+        if (caught) { targetEl.classList.add('is-caught'); finish(); }
+        else { dropAt = null; controls.querySelectorAll('button').forEach(control => { control.disabled = false; }); error(); }
       });
-      machine.append(targetEl, claw); body.append(machine, controls);
-      hint.textContent = 'Drag claw · then drop';
+      rod.style.left = initial + '%';
+      machine.append(rod, targetEl, claw); body.append(machine, controls);
+      hint.textContent = 'Hold arrows to move · tap for a nudge · drop';
     } else if (type === 'upload') {
       let state = 'idle', startedAt = 0;
       const cloud = node('div', 'ex-upload-cloud');
@@ -683,6 +806,7 @@
     }
 
     return {
+      suspend() { suspenders.forEach(suspend => suspend()); },
       tick(ageMs, deltaMs = 0) {
         if (done || destroyed || demo) return;
         age = Math.max(0, ageMs);

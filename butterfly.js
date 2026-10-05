@@ -45,7 +45,7 @@
       this.running = running;
       this.layer.classList.toggle('butterfly-paused', !running);
       this.button.disabled = !running;
-      if (!this.active || !running || this.offer) return;
+      if (!this.active || !running) return;
       const width = this.container.clientWidth;
       const height = this.container.clientHeight;
       const flight = Math.max(0, elapsed - this.hatchedAt);

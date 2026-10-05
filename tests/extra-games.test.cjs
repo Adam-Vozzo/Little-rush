@@ -90,8 +90,8 @@ function mazeGeometry(g) {
   return { maze, center: index => ({ clientX: left + (index % 5 + .5) * width, clientY: top + (Math.floor(index / 5) + .5) * width }) };
 }
 
-test('all eleven extensions register, mount, and remain inert in demo mode', () => {
-  assert.equal(catalog.length, 11); assert.equal(new Set(catalog.map(item => item.id)).size, 11);
+test('all twelve extensions register, mount, and remain inert in demo mode', () => {
+  assert.equal(catalog.length, 12); assert.equal(new Set(catalog.map(item => item.id)).size, 12);
   for (const item of catalog) {
     const g = game(item.id, { demo: true });
     g.all('button').forEach(button => button.click()); g.tick(15000);
@@ -101,6 +101,7 @@ test('all eleven extensions register, mount, and remain inert in demo mode', () 
 });
 test('extras expose concise objectives with consistent category colors', () => {
   const expected = { match: ['MATCH', 'sage'], roll: ['TURN UPRIGHT', 'sage'], type: ['TYPE THE WORD', 'lavender'], maze: ['DRAG TO EXIT', 'blue'], sign: ['SIGN HERE', 'sage'], memory: ['REMEMBER', 'lavender'], level: ['SLIDE TO MARKS', 'blue'], catch: ['CATCH IT', 'sage'], upload: ['UPLOAD', 'peach'], connect: ['JOIN PIPES', 'blue'], dice: ['TAP LOW TO HIGH', 'butter'] };
+  expected.aim = ['TAP TARGETS', 'sage'];
   catalog.forEach(item => assert.deepEqual([item.title, item.color], expected[item.id]));
 });
 test('roll requires beetle to reach upright', () => {
@@ -273,21 +274,29 @@ test('Match requires color and shape, permits retries, and every target can be s
     const reel=g.one('.ex-match-strip').children, index=reel.findIndex(el=>el.getAttribute('aria-label')===target);
     const wrong=(index+1)%9;
     g.tick(wrong*620);g.one('.ex-match-stop').click();assert.equal(g.completions,0);assert.equal(g.feedback.at(-1),'error');
-    const next=((index<=wrong?9:0)+index)*620+500;
+    const next=((index<=wrong+1?9:0)+index)*620;
     g.tick(next);g.one('.ex-match-stop').click();completedOnce(g);
   }
 });
-test('claw arrows move smoothly, settle their swing, and allow dropping between them',()=>{
+test('claw arrows give a tiny tap nudge, continuous hold, and a release swing that settles',()=>{
   const g=game('catch'),claw=g.one('.ex-claw'),initial=Number(claw.getAttribute('aria-valuenow'));
-  g.label('Move claw right').click();g.tick(16,16);
-  assert.ok(Number(claw.getAttribute('aria-valuenow'))>initial);assert.ok(Number(claw.getAttribute('aria-valuenow'))<initial+12);
+  const right=g.label('Move claw right');
+  right.dispatch('pointerdown'); g.tick(16,16); right.dispatch('pointerup'); right.dispatch('click',{detail:1});
+  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial+2);
   assert.notEqual(claw.style['--claw-swing'],'0.00deg');
-  for(let t=32;t<2000;t+=16)g.tick(t,16);
-  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial+12);assert.ok(Math.abs(parseFloat(claw.style['--claw-swing']))<.05);
-  g.label('Move claw left').click();for(let t=2000;t<3000;t+=16)g.tick(t,16);
-  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial);
-  g.label('Drop claw').click();g.label('Move claw right').click();g.tick(3100,16);
-  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial);
+  for(let t=32;t<=1000;t+=16)g.tick(t,16);
+  assert.equal(Number(claw.getAttribute('aria-valuenow')),initial+2);
+  right.dispatch('pointerdown');
+  for(let t=1016;t<=1600;t+=16)g.tick(t,16);
+  const heldPosition=Number(claw.getAttribute('aria-valuenow'));
+  assert.ok(heldPosition>initial+15 && heldPosition<initial+35);
+  right.dispatch('pointerup');
+  let maxSwing=0;
+  for(let t=1616;t<=4000;t+=16){g.tick(t,16);maxSwing=Math.max(maxSwing,Math.abs(parseFloat(claw.style['--claw-swing'])));}
+  assert.ok(maxSwing>1);assert.ok(Math.abs(parseFloat(claw.style['--claw-swing']))<.1);
+  assert.equal(Number(claw.getAttribute('aria-valuenow')),heldPosition);
+  g.label('Drop claw').click();right.dispatch('pointerdown');g.tick(4100,16);
+  assert.equal(Number(claw.getAttribute('aria-valuenow')),heldPosition);
 });
 test('random level targets and initial knobs are always separated and each puzzle can be dragged into place', () => {
   const variations = new Set();
@@ -303,6 +312,90 @@ test('random level targets and initial knobs are always separated and each puzzl
     completedOnce(g);
   }
   assert.ok(variations.size > 70);
+});
+
+test('Match accepts a tile tap, keeps scrolling during cooldown, and blocks repeated guesses', () => {
+  const g = game('match'), root = g.one('.mg-match'), stop = g.one('.ex-match-stop'), strip = g.one('.ex-match-strip');
+  const target = g.one('.ex-match-shape').getAttribute('aria-label');
+  const index = strip.children.findIndex(el => el.getAttribute('aria-label') === target);
+  const wrong = (index + 1) % 9, missedAt = wrong * 620;
+  g.tick(missedAt); root.dispatch('click'); assert.equal(g.feedback.at(-1), 'error');
+  const before = strip.style.transform;
+  g.tick(missedAt + 400); assert.notEqual(strip.style.transform, before); assert.equal(stop.disabled, true);
+  for (let i = 0; i < 10; i++) root.dispatch('click');
+  assert.equal(g.feedback.length, 1); assert.equal(g.completions, 0);
+  g.tick(missedAt + 749); assert.equal(stop.disabled, true);
+  g.tick(missedAt + 750); assert.equal(stop.disabled, false);
+  g.tick(((index <= wrong + 1 ? 9 : 0) + index) * 620); root.dispatch('click'); completedOnce(g);
+});
+
+test('claw holds have one owner and release on cancel, capture loss, blur, pause, or the matching key', () => {
+  for (const cancel of ['pointercancel', 'lostpointercapture', 'blur', 'pause']) {
+    const g = game('catch'), left = g.label('Move claw left'), right = g.label('Move claw right'), claw = g.one('.ex-claw');
+    left.dispatch('pointerdown', {pointerId: 7}); right.dispatch('pointerdown', {pointerId: 8});
+    left.dispatch('pointerup', {pointerId: 8}); g.tick(300, 32);
+    assert.equal(left.captured, 7); assert.equal(right.captured, undefined);
+    if (cancel === 'pause') g.suspend(); else left.dispatch(cancel, {pointerId: 7});
+    const at = claw.getAttribute('aria-valuenow');
+    g.tick(600, 32); assert.equal(claw.getAttribute('aria-valuenow'), at); assert.equal(left.captured, null);
+    right.dispatch('keydown', {key: 'Enter'}); g.tick(900, 32);
+    right.dispatch('keyup', {key: ' '}); assert.ok(right.classList.contains('is-held'));
+    right.dispatch('keyup', {key: 'Enter'}); assert.equal(right.classList.contains('is-held'), false);
+    g.destroy();
+  }
+});
+
+test('claw rod follows a slow descent, a grab pause, and retraction before completion', () => {
+  const g = game('catch'), claw = g.one('.ex-claw'), rod = g.one('.ex-claw-rod');
+  g.one('.ex-catch-machine').rect = {height: 100, width: 120}; claw.rect = {height: 40, width: 40};
+  g.one('.ex-catch-prize').rect = {height: 24, width: 24};
+  dragTo(claw, 20); g.label('Drop claw').click();
+  g.tick(350); const halfway = parseFloat(rod.style.height); assert.ok(halfway > 8);
+  g.tick(700); const bottom = parseFloat(rod.style.height); assert.ok(bottom > halfway);
+  assert.equal(g.completions, 0); g.tick(850); assert.equal(parseFloat(rod.style.height), bottom);
+  g.tick(1150); assert.ok(parseFloat(rod.style.height) < bottom); assert.ok(parseFloat(rod.style.height) > 8);
+  g.tick(1450); assert.equal(parseFloat(rod.style.height), 8); completedOnce(g);
+});
+
+test('maze slides around an open corner and recovers from exact wall junctions', () => {
+  const corner = {width: 2, height: 2, cells: [2, 12, 0, 1]};
+  for (const from of [[.5, .5], [.999, .999], [1, 1]]) {
+    const slide = puzzles.slideMazeSegment(corner, 0, from, [1.5, 1.5]);
+    assert.equal(slide.cell, 3); assert.deepEqual(Array.from(slide.visited), [1, 3]);
+    assert.ok(Math.hypot(slide.point[0] - 1.5, slide.point[1] - 1.5) < .01);
+  }
+  const closed = {width: 2, height: 2, cells: [2, 8, 0, 0]};
+  const slide = puzzles.slideMazeSegment(closed, 0, [.999, .999], [1.5, 1.5]);
+  assert.equal(slide.cell, 1); assert.deepEqual(Array.from(slide.visited), [1]);
+});
+
+test('aim is player-started, fades in for 500ms, and requires all six timed targets', () => {
+  const g = game('aim'); g.tick(4000); assert.equal(g.all('.ex-aim-target').length, 0);
+  g.label('Start aim trainer').click(); assert.equal(g.all('.ex-aim-target').length, 1);
+  const first = g.label('Target 1'); first.click(); assert.equal(g.feedback.length, 1);
+  g.tick(4250); assert.equal(first.style.opacity, '0.5');
+  g.label('Start aim trainer').click(); assert.equal(g.all('.ex-aim-target').length, 1);
+  g.tick(4499); first.click(); assert.equal(g.feedback.length, 1);
+  for (let i = 1; i <= 6; i++) {
+    g.tick(4000 + i * 500); const target = g.label('Target ' + i);
+    assert.ok(target.classList.contains('is-ready')); target.dispatch('pointerdown'); target.click();
+    assert.equal(g.feedback.length, i + 1);
+    if (i < 6) assert.equal(g.completions, 0);
+  }
+  completedOnce(g);
+});
+
+test('aim misses reset the tile, cannot accept expired or stale targets, and use active time', () => {
+  const g = game('aim'); g.label('Start aim trainer').click(); const first = g.label('Target 1');
+  g.tick(999); for (let i = 0; i < 10; i++) g.tick(999);
+  assert.equal(g.label('Start aim trainer').hidden, true);
+  g.tick(1000); assert.equal(g.all('.ex-aim-target').length, 0); assert.equal(g.label('Start aim trainer').hidden, false);
+  assert.equal(g.completions, 0); g.label('Start aim trainer').click();
+  first.dispatch('pointerdown'); assert.equal(g.label('Start aim trainer').hidden, true);
+  g.tick(1500); g.label('Target 1').click();
+  g.tick(2500); assert.equal(g.all('.ex-aim-target').length, 0); assert.equal(g.completions, 0);
+  g.label('Start aim trainer').click(); g.tick(9000); assert.equal(g.all('.ex-aim-target').length, 0);
+  g.label('Start aim trainer').click(); g.destroy(); g.tick(10000); assert.equal(g.completions, 0);
 });
 test('shared sliders ignore rail taps and small clicks, preserve grip offset, and own their pointer', () => {
   for (const type of ['level', 'catch']) {
@@ -336,10 +429,12 @@ test('catch requires moving the claw and a finished drop, locks position while d
   assert.equal(g.all('button').length, 3);
   g.label('Drop claw').click(); claw.dispatch('keydown', { key: 'ArrowLeft' });
   claw.dispatch('pointerdown', { clientX: 60 }); assert.equal(claw.captured, undefined);
-  g.tick(350); assert.equal(g.completions, 0);
-  dragTo(claw, target, { release: false }); g.label('Drop claw').click(); g.tick(1000); assert.equal(g.completions, 0);
+  g.tick(1449); assert.equal(g.completions, 0); assert.equal(g.label('Drop claw').disabled, true);
+  g.tick(1450); assert.equal(g.label('Drop claw').disabled, false);
+  dragTo(claw, target, { release: false }); g.label('Drop claw').click(); g.tick(1600); assert.equal(g.completions, 0);
   claw.dispatch('pointerup'); g.label('Drop claw').click();
-  g.tick(1349); assert.equal(g.completions, 0); g.tick(1350); completedOnce(g);
+  g.tick(2300); assert.equal(g.completions, 0); assert.ok(g.one('.ex-catch-prize').classList.contains('is-held'));
+  g.tick(3049); assert.equal(g.completions, 0); g.tick(3050); completedOnce(g);
 });
 test('upload follows Upload → game-clock progress → Complete and never auto-completes', () => {
   const g = game('upload'); g.tick(500); g.label('Upload').click();

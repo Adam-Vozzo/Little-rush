@@ -282,10 +282,11 @@ test('simon ignores early input, flashes a pattern, replays mistakes, and accept
   pink.click(); pink.click();
   assert.equal(g.completions, 0);
   pink.click();
+  assert.ok(pink.classList.contains('is-lit'), 'the final input keeps its successful highlight');
   assertCompleteOnce(g);
 });
 
-test('stop retries an out-of-zone press and completes in the highlighted zone', () => {
+test('stop keeps moving during its 750ms wrong-answer cooldown and then accepts a retry', () => {
   const g = game('stop');
   const button = g.one('.mg-stop-button');
   assert.equal(catalog.find(entry => entry.id === 'stop').title, 'STOP IN THE GREEN');
@@ -297,6 +298,11 @@ test('stop retries an out-of-zone press and completes in the highlighted zone', 
   assert.equal(g.feedback.at(-1), 'error');
   g.tick(420 * Math.PI / 2, 100);
   assert.ok(Math.abs(parseFloat(g.one('.mg-stop-dot').style.left) - 50) < 0.001);
+  button.click();
+  assert.equal(g.completions, 0); assert.equal(button.disabled, true);
+  for (let i = 0; i < 10; i++) { g.tick(749); button.click(); }
+  assert.equal(g.feedback.length, 1); assert.equal(button.disabled, true);
+  g.tick(750); assert.equal(button.disabled, false);
   button.click();
   assertCompleteOnce(g);
 });

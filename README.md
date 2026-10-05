@@ -1,6 +1,6 @@
 # Little Rush
 
-A mobile-first 2D micro-game collection with 22 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.5.0 adds Match, difficulty modes, timing-based scoring, larger touch controls, deliberate memory starts, and a foil material with reflective edges and touch tilt. No libraries, external assets, account or network connection are required to play.
+A mobile-first 2D micro-game collection with 23 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.6.0 adds an aim trainer, clearer Simon sectors, immediate shape dragging, continuous wall sliding, hold-to-move claw controls, and animated retry cooldowns. No libraries, external assets, account or network connection are required to play.
 
 ## Play
 
@@ -26,7 +26,7 @@ Future pushes to `main` update the site automatically. See [GitHub's publishing-
 - On Normal, every tile has **25 seconds**. Its filled top-right circle empties as time runs out and turns red in the final 4 seconds. A single expired tile ends the run.
 - **WAIT & HATCH** can appear randomly during the run: wait 3 seconds for the caterpillar to become a chrysalis, then tap to release a butterfly. It appears only once per run. **CRACK IT** games are geodes: tap a randomized 5–11 times to crack the shell and reveal glowing crystals.
 - The butterfly flutters over the board for the rest of that run. Hatching unlocks **FEED BUTTERFLY** when that game is enabled, queuing it for the next regular spawn. Later Feed tiles can appear randomly, with at most one active at a time.
-- Drag nectar out of its tile to the butterfly. It stays still while you carry nectar, making it easier to reach. A missed drop can be retried. Keyboard users can select nectar with Enter and then activate the focused butterfly.
+- Drag nectar out of its tile to the butterfly. It keeps flying while you carry nectar. A missed drop can be retried. Keyboard users can select nectar with Enter and then activate the focused butterfly.
 - Complete tiles in any order. Wrong inputs can be retried. Pause freezes game time, animations and spawn scheduling; leaving the tab pauses automatically. Restart clears the butterfly and Feed unlock.
 - During play, a compact bar shows elapsed time, cleared count and pause. Each tile's title states its objective. Controls fill the remaining tile space, with no visible instruction footer. Essential puzzle content, such as a wire's target endpoints, stays visible; detailed state updates remain available to screen readers. Sound is optional and initially off.
 
@@ -62,10 +62,10 @@ Tile colors identify five consistent categories:
 | Butter | Numbers | Solve, Tap in Order, Tap Low to High |
 | Lavender | Memory | Repeat, Remember, Type the Word |
 | Blue | Spatial | Turn On, Match Shapes, Cut the Wire, Drag to Exit, Slide to Marks, Join Pipes |
-| Sage | Dexterity | Turn Upright, Stop in the Green, Hold, Sign Here, Catch It |
+| Sage | Dexterity | Turn Upright, Stop in the Green, Hold, Sign Here, Catch It, Match, Tap Targets |
 | Peach | Nature | Wait & Hatch, Crack It, Upload, Feed Butterfly |
 
-## The 22 games
+## The 23 games
 
 | Game | Action |
 | --- | --- |
@@ -75,7 +75,7 @@ Tile colors identify five consistent categories:
 | TAP IN ORDER | Tap numbers from 1 to 4. |
 | TURN ON | Turn all six switches on. They are arranged in two columns of three, and 1–4 start on at random. |
 | REPEAT | Press Start in the center of the circle, then watch and repeat a three-color sequence. |
-| STOP IN THE GREEN | Tap the inset lower button while the moving dot is inside the green zone. |
+| STOP IN THE GREEN | Tap the inset lower button while the moving dot is inside the green zone. A miss locks the button for 750ms while the dot keeps moving. |
 | HOLD | Hold the button continuously for one second. |
 | MATCH SHAPES | Drag all three shapes to their matching outline slots. |
 | CUT THE WIRE | Trace randomly labelled letter/digit endpoints and cut the requested wire. |
@@ -85,11 +85,12 @@ Tile colors identify five consistent categories:
 | SIGN HERE | Draw any sufficiently long signature inside the box, then lift your finger. |
 | REMEMBER | Remember a five-character code containing letters and digits. Press Start to hide it and reveal the keys. A mistake reveals it again for a deliberate retry. |
 | SLIDE TO MARKS | Grab and slide three large knobs into the wider target marks. No visible target numbers; tapping the track does not move them. |
-| CATCH IT | Move the claw with the bottom left/right arrows or drag it, then press the center Drop button. Arrow movement eases into place and the claw gives a small settling swing. |
+| CATCH IT | Move the claw with the bottom left/right arrows or drag it, then press the center Drop button. Hold an arrow to travel, tap for a tiny nudge, then release for a momentum swing. The rod extends over 700ms, pauses to grab, and retracts before completion. |
 | UPLOAD | Tap Upload, wait for the three-second progress bar, then tap Complete. |
 | JOIN PIPES | Rotate six pipe segments to connect the two endpoints of a generated puzzle. |
 | TAP LOW TO HIGH | Tap the dice in ascending dot-count order. |
-| MATCH | Stop the scrolling field when both its color and shape match the reference on the left. |
+| MATCH | Tap anywhere in the tile when both the scrolling color and shape match the reference. A miss has a 750ms cooldown while scrolling continues. |
+| TAP TARGETS | Press Start. Six circles spawn at 500ms intervals over three seconds, each fading and scaling in for 500ms. Tap each within its next 500ms or the tile resets for another attempt. |
 | FEED BUTTERFLY | Drag nectar across the board to the unlocked butterfly. |
 
 Select **Let's play** on the title screen to start a run. The play screen gives most of the portrait viewport to its eight square tiles. The compact header, six-pixel tile padding and larger controls accommodate both touch and mouse input; keyboard alternatives are also available for the supported interactions.
@@ -98,7 +99,7 @@ Select **Let's play** on the title screen to start a run. The play screen gives 
 
 - `engine.js`: timer-free run state. Spawn cadence, deadlines, dynamic availability, queued games and restart/pause handling.
 - `microgames.js` and `microgames.css`: ten core games, including hatch, geode, wire, switch and shape interactions.
-- `extra-games.js` and `extra-games.css`: eleven additional games, pure puzzle generators, and the shared thumb-only slider control.
+- `extra-games.js` and `extra-games.css`: twelve additional games, pure puzzle generators, and the shared thumb-only slider control.
 - `butterfly.js` and `butterfly.css`: persistent butterfly and cross-board nectar drag interaction.
 - `app.js`: title and play screens, the one-time hatch and Feed gating, Tweaks selections, countdowns, sounds and local daily/all-time records.
 - `styles.css`: compact responsive portrait board, title screen and dialogs.
