@@ -222,6 +222,49 @@ test('bubble shots clear a connected group, count progress, and complete once af
   }
   assert.equal(g.completions, 1); assert.equal(g.one('.arc-caption').textContent, '6 / 6');
 });
+
+test('bubble racks retain every unpopped piece across misses and low attachments', () => {
+  let misses = 0, lowAttachments = 0;
+  for (let seed = 1; seed <= 30; seed++) {
+    const g = game('bubbles', {random: seeded(seed * 65537)});
+    for (const angle of [-65, 65, -45, 45, 0, -25, 25]) {
+      if (g.completions) break;
+      const before = g.all('.arc-bubble-piece');
+      setAngle(g, angle); g.label('Shoot ball').click(); g.advance(1800);
+      for (const piece of before) if (!piece.classList.contains('is-popped')) assert.ok(piece.parentElement, 'Unpopped balls must never be replaced');
+      if (before.every(piece => !piece.classList.contains('is-popped'))) misses++;
+      lowAttachments += g.all('.arc-bubble-piece').filter(piece => Number(piece.getAttribute('transform').match(/[\d.]+/g)[1]) > 95).length;
+    }
+    g.destroy();
+  }
+  assert.ok(misses > 10); assert.ok(lowAttachments > 0);
+});
+
+test('responsive golf and telescope fill tall fields and disconnect resize observers', () => {
+  const observers = [];
+  window.ResizeObserver = class {
+    constructor(callback) { this.callback = callback; observers.push(this); }
+    observe(field) { this.field = field; }
+    disconnect() { this.disconnected = true; }
+  };
+  try {
+    for (const type of ['golf', 'telescope']) {
+      const g = game(type), observer = observers.at(-1), field = g.one('.arc-scene');
+      field.clientWidth = 200; field.clientHeight = 190; field.rect = {left: 0, top: 0, width: 200, height: 190};
+      observer.callback(); assert.equal(field.getAttribute('viewBox'), '0 0 200 190');
+      assert.equal(g.all('.arc-caption').length, 0);
+      if (type === 'golf') {
+        const ball = g.one('.arc-golf-ball'), x = Number(ball.getAttribute('cx')), y = Number(ball.getAttribute('cy'));
+        field.dispatch('pointerdown', {clientX:x, clientY:y}); field.dispatch('pointerup', {clientX:x-20, clientY:y});
+        g.advance(100); assert.ok(Number(ball.getAttribute('cx')) > x);
+      } else {
+        assert.match(g.one('.arc-target-planet').getAttribute('transform'), /translate\(30 20\)/);
+        assert.equal(g.all('.arc-ring-back').length, 1); assert.equal(g.all('.arc-ring-front').length, 1);
+      }
+      g.destroy(); assert.ok(observer.disconnected);
+    }
+  } finally { delete window.ResizeObserver; }
+});
 test('peg shots rebound and remember marked hits between shots', () => {
   const g = game('pegs');
   for (const angle of [-40, -25, -10, 0, 15, 30, 45, -55, -15, 20, 40, -65, 65, -60, 60]) {
@@ -248,7 +291,7 @@ test('board consumes four fixed dice, resets the same choices on overshoot and p
   assert.equal(dice.length, 4); assert.equal(g.all('.arc-caption').length, 0);
   const initialFaces = dice.map(die => die.children.map(el => el.getAttribute('cx')).join());
   for (const value of [...layout.values].sort((a, b) => a - b)) { g.label(`Move ${value} spaces`).click(); g.advance(1300); }
-  g.advance(500); assert.equal(g.completions, 0); assert.equal(g.one('.arc-board-status').textContent, `${layout.goal} TO GO`);
+  g.advance(500); assert.equal(g.completions, 0); assert.equal(g.one('.arc-board-status').textContent, '');
   assert.deepEqual(dice.map(die => die.children.map(el => el.getAttribute('cx')).join()), initialFaces);
   const mask = Array.from({length:15},(_,i)=>i+1).find(mask=>layout.values.reduce((sum,n,i)=>sum+(mask & 1<<i ? n : 0),0)===layout.goal);
   for (let i = 0; i < 4; i++) if (mask & 1 << i) { dice[i].click(); assert.equal(g.completions,0); g.advance(1300); assert.ok(dice[i].classList.contains('is-used')); }
@@ -267,7 +310,7 @@ test('golf pull-back releases in the opposite direction and comes to rest for an
   const g = game('golf'), field = g.one('.arc-scene'); field.rect = {left: 0, top: 0, width: 200, height: 150};
   const {start} = rules.generateGolf(() => 0);
   field.dispatch('pointerdown', {clientX: start.x, clientY: start.y}); field.dispatch('pointerup', {clientX: start.x - 15, clientY: start.y}); g.advance(100);
-  assert.ok(Number(g.one('.arc-golf-ball').getAttribute('cx')) > start.x); g.advance(5000); assert.equal(g.one('.arc-caption').textContent, 'PULL BACK · RELEASE');
+  assert.ok(Number(g.one('.arc-golf-ball').getAttribute('cx')) > start.x); g.advance(5000); assert.equal(g.one('.mg-hint').textContent, 'PULL BACK · RELEASE');
 });
 test('golf can complete a generated course and retain the finished state at different frame rates', () => {
   for (const frame of [1000 / 30, 1000 / 60, 1000 / 120]) {
@@ -286,7 +329,7 @@ test('golf can complete a generated course and retain the finished state at diff
       field.dispatch('pointerdown',{clientX:current.x,clientY:current.y}); field.dispatch('pointerup',{clientX:current.x-best.dx,clientY:current.y-best.dy}); g.advance(4500,frame);
       current={x:Number(g.one('.arc-golf-ball').getAttribute('cx')),y:Number(g.one('.arc-golf-ball').getAttribute('cy'))};
     }
-    assert.equal(g.completions, 1); assert.equal(g.one('.arc-caption').textContent, 'IN THE CUP!'); assert.ok(g.one('.arc-golf-ball').classList.contains('is-sunk'));
+    assert.equal(g.completions, 1); assert.equal(g.one('.mg-hint').textContent, 'Ball in the hole'); assert.ok(g.one('.arc-golf-ball').classList.contains('is-sunk'));
   }
 });
 test('random peg layouts are solvable with aimed shots', () => {

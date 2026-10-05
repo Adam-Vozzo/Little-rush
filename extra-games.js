@@ -351,9 +351,17 @@
         cells.push(cell); maze.append(cell);
       });
       const overlay = node('div', 'ex-maze-overlay');
-      overlay.innerHTML = '<svg viewBox="0 0 5 5" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path class="ex-maze-ink" stroke="#b96869" stroke-width=".075" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/><circle class="ex-maze-dot" r=".34" fill="#b96869" stroke="#fff8ed" stroke-width=".07"/></svg>';
+      overlay.innerHTML = '<svg viewBox="0 0 5 5" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path class="ex-maze-ink" stroke="#b96869" stroke-width=".075" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/><ellipse class="ex-maze-dot" rx=".34" ry=".34" fill="#b96869" stroke="#fff8ed" stroke-width=".07"/></svg>';
       const mazeInk = overlay.querySelector('.ex-maze-ink'), mazeDot = overlay.querySelector('.ex-maze-dot');
       maze.append(overlay);
+      if (window.ResizeObserver) {
+        const observer = new window.ResizeObserver(() => {
+          const w = overlay.clientWidth, h = overlay.clientHeight;
+          if (!w || !h) return;
+          mazeDot.setAttribute('rx', .34 * Math.min(w, h) / w); mazeDot.setAttribute('ry', .34 * Math.min(w, h) / h);
+        });
+        observer.observe(overlay); removers.push(() => observer.disconnect());
+      }
       const paintDot = point => {
         const previous = trail[trail.length - 1];
         dotPoint = [...point];
@@ -663,12 +671,13 @@
       const { target, initial } = generateLevels(random, 1, 10, 90)[0];
       let previousPosition = initial;
       const machine = node('div', 'ex-catch-machine');
+      const carriage = node('div', 'ex-catch-travel');
       const targetEl = node('span', 'ex-catch-prize', '✿');
       const rod = node('span', 'ex-claw-rod');
       const claw = node('div', 'ex-claw ex-slider-thumb');
       claw.innerHTML = svg('<path d="M50 0v32m0 0L28 58l8 12m14-38 22 26-8 12" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="33" y="0" width="34" height="22" rx="4" fill="#fff8e9"/>');
       targetEl.style.left = `${target}%`;
-      const slider = slidingControl({ track: machine, handle: claw, initial, label: 'Drag the claw over the flower', describe: value => `${Math.round(value)}%; flower at ${target}%`, canMove: () => dropAt === null && !held });
+      const slider = slidingControl({ track: carriage, handle: claw, initial, label: 'Drag the claw over the flower', describe: value => `${Math.round(value)}%; flower at ${target}%`, canMove: () => dropAt === null && !held });
       const controls = node('div', 'ex-catch-controls');
       const stopMoving = (settleTap = false) => {
         if (!held) return;
@@ -747,7 +756,7 @@
         else { dropAt = null; controls.querySelectorAll('button').forEach(control => { control.disabled = false; }); error(); }
       });
       rod.style.left = initial + '%';
-      machine.append(rod, targetEl, claw); body.append(machine, controls);
+      carriage.append(rod, targetEl, claw); machine.append(carriage); body.append(machine, controls);
       hint.textContent = 'Hold arrows to move · tap for a nudge · drop';
     } else if (type === 'upload') {
       let state = 'idle', startedAt = 0;

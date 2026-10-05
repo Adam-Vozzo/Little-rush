@@ -1,6 +1,6 @@
 # Little Rush
 
-A mobile-first 2D micro-game collection with 29 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.9.0 adds direct drag aiming, varied arcade layouts, a larger telescope and a dice puzzle with four fixed choices. Zen has only one cocoon per run. No libraries, external assets, account or network connection are required to play.
+A mobile-first 2D micro-game collection with 29 playable challenges, built with plain HTML, CSS and JavaScript. Version 0.10.0 fills the tile play areas, unifies the shape artwork, and makes holofoil tilt track drags immediately. Pop Six keeps its rack between shots. Zen has only one cocoon per run. No libraries, external assets, account or network connection are required to play.
 
 ## Play
 
@@ -55,7 +55,7 @@ Practice directly in any tile, including games disabled for runs. A completed ti
 In **Styles**, choose **Flat** or **Holofoil**. Style changes apply immediately, are saved in this browser and are restored when the game is reopened.
 
 - **Flat** is the default minimal pastel appearance.
-- **Holofoil** uses a dark backdrop, matte pearl tiles with a reflective foil bevel and engraved corner detail and a brief perspective landing when a tile appears. A WebGL fragment shader produces the moving foil highlights and responds to the pointer, with a subtle touch-position tilt; category colors and readable game controls remain distinct.
+- **Holofoil** uses a dark backdrop, matte pearl tiles with a reflective foil bevel and engraved corner detail and a brief perspective landing when a tile appears. A WebGL fragment shader produces the moving foil highlights and responds to the pointer, with a subtle touch-position tilt that follows input directly and eases back on release; category colors and readable game controls remain distinct.
 - With the system's reduced-motion preference enabled, foil highlights remain still and the landing animation is removed. Foil animation also pauses while a dialog is open or the page is hidden.
 - If WebGL is unavailable or its context is lost, Holofoil keeps a static CSS foil finish. Game controls continue to work.
 
@@ -78,7 +78,7 @@ Tile colors identify five consistent categories:
 | SOLVE | Choose the correct arithmetic answer. A wrong answer locks all choices for 0.75 seconds. |
 | TAP IN ORDER | Tap numbers from 1 to 4. |
 | TURN ON | Turn all six switches on. They are arranged in two columns of three, and 1–4 start on at random. |
-| REPEAT | Press Start in the center of the circle, then watch and repeat a three-color sequence. |
+| REPEAT | Press the round Start button between four full quadrant panels, then watch and repeat a three-color sequence. |
 | STOP IN THE GREEN | Tap the inset lower button while the moving dot is inside the green zone. A miss locks the button for 750ms while the dot keeps moving. |
 | HOLD | Hold the button continuously for one second. |
 | MATCH SHAPES | Drag all three shapes to their matching outline slots. |
@@ -95,10 +95,10 @@ Tile colors identify five consistent categories:
 | TAP LOW TO HIGH | Tap the dice in ascending dot-count order. |
 | MATCH | Tap anywhere in the tile when both the scrolling color and shape match the reference. A miss has a 750ms cooldown while scrolling continues. |
 | TAP TARGETS | Press Start. Six circles spawn at 500ms intervals over three seconds, each fading and scaling in for 500ms. Tap each within its next 500ms or the tile resets for another attempt. |
-| POP SIX | Tap or drag anywhere in the field to aim, then press Shoot. Connect three same-color balls; clear six in total. Random racks have varied colors and silhouettes, with an exposed matching pair. Shots rebound off side walls. Arrow keys aim and Space shoots. |
+| POP SIX | Tap or drag anywhere in the field to aim, then press Shoot. Connect three same-color balls; clear six in total. Random racks have varied colors and silhouettes, with an exposed matching pair. Shots rebound off side walls. Unpopped balls stay in place between shots, including misses and low attachments. Arrow keys aim and Space shoots. |
 | MAKE THREE | Tap two neighboring shapes or swipe one to swap. Make a horizontal or vertical line of three. Invalid swaps return; every board has a solution. |
 | HIT THREE PEGS | Tap or drag to aim from above, then press Shoot. The ball falls and rebounds; hit all three marked gold pegs across as many shots as needed. Each field randomizes the peg positions and count with safe gaps. Arrow keys aim and Space shoots. |
-| FIND THE PLANET | Drag the enlarged sky view, or use arrow keys. Center the planet matching the large, unboxed reference for 400ms to lock on. A ring indicates progress without extra text. |
+| FIND THE PLANET | Drag the enlarged sky view, or use arrow keys. Center the planet matching the large reference straddling the telescope edge for 400ms to lock on. A ring indicates progress without extra text. |
 | LAND ON THE GIFT | Choose from four fixed dice, using each at most once. Reach a gift 6–12 spaces away, depending on the randomized path. At least one combination lands exactly. Overshooting restores the same four dice and sends the pawn back to the start; no new dice appear between moves. |
 | PUTT IT IN | Drag back from the ball to aim and set power, then release. Courses vary the start, cup, turf, and round or rectangular obstacles. The start and cup are at least 90 game units apart. Keep putting until the ball drops into the cup. Arrow keys adjust aim/power; Space shoots. |
 | FEED BUTTERFLY | Drag nectar across the board to the unlocked butterfly. |
@@ -123,7 +123,7 @@ Add a pack with `LittleRushGames.register(catalogEntries, mountFunction)`. Each 
 
 ## Verification
 
-Run `npm test` / `node --test tests/*.test.cjs`. Tests cover all 29 games, 2.5-second spawns, 25-second deadline boundaries, full-board handling, queue/unlock logic, pointer ownership, cooldowns, upload states, pause/restart/expiry cleanup, and the integrated hatch-to-feed lifecycle. Generated layouts are checked across hundreds of seeds: solvable match-three and fixed-dice boards, connected bubble racks, separated pegs, and traversable golf courses. Shot solvers exercise randomized peg fields and golf completion at 30, 60 and 120fps. DOM test doubles verify logic; browser checks verify rendered layout and real pointer behavior.
+Run `npm test` / `node --test tests/*.test.cjs`. Tests cover all 29 games, 2.5-second spawns, 25-second deadline boundaries, full-board handling, queue/unlock logic, pointer ownership, cooldowns, upload states, pause/restart/expiry cleanup, and the integrated hatch-to-feed lifecycle. Generated layouts are checked across hundreds of seeds: solvable match-three and fixed-dice boards, connected bubble racks, separated pegs, and traversable golf courses. Shot solvers exercise randomized peg fields and golf completion at 30, 60 and 120fps. Regression checks cover persistent bubble racks, responsive field coordinates, and continuous tilt with cancellation and reduced motion. DOM test doubles verify logic; browser checks verify rendered layout and real pointer behavior.
 
 The browser QA checklist includes the hatch-to-butterfly-to-nectar sequence, shape drops, wire cuts, bounded switch knobs, slider and claw drags, ignored track taps, upload progression, generated maze routes and blocked wall shortcuts, pipe solutions, geode reveal, math cooldown, compact tile layouts, portrait phone sizes, records, and persistent Tweaks selections. Check both Styles choices, saved theme restoration, Holofoil's reduced-motion behavior and its WebGL fallback. Also check loading and starting with every asset served under a `/Little-rush/` path. No physical iOS/Android device testing has been performed.
 

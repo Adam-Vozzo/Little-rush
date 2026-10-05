@@ -14,7 +14,7 @@
 .ex-memory-code { letter-spacing: .18em; padding-left: .18em; font-size: clamp(26px, 20cqw, 38px); line-height: 1.08; font-weight: 650; font-variant-numeric: tabular-nums; text-align: center; flex-shrink: 0; }
 .mg-memory .ex-key { font-size: clamp(20px, 16cqw, 30px) !important; }
 .ex-maze-board { width: 100%; height: 100%; min-height: 0; display: flex; align-items: center; justify-content: center; }
-.ex-maze-grid { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); width: auto; height: 100%; max-width: 100%; aspect-ratio: 1; flex-shrink: 1; padding: 2px; gap: 0; background: #fff8e9d9; border-radius: 3px; border: 1px solid #66657b; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ex-maze-grid { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); width: 100%; height: 100%; min-width: 0; padding: 2px; gap: 0; background: #fff8e9d9; border-radius: 8px; border: 1px solid #66657b; touch-action: none; user-select: none; -webkit-user-select: none; }
 .ex-maze-grid:focus-visible { outline: 2px solid #45634e; outline-offset: 2px; }
 .ex-maze-grid.is-dragging, .ex-maze-grid.is-dragging .ex-maze-cell { cursor: grabbing; }
 .ex-maze-cell.is-player { cursor: grab; }
@@ -38,8 +38,9 @@
 .ex-level-row.is-matched .ex-level-label { color: #3c683b; font-weight: 800; opacity: 1; }
 .ex-level-row.is-matched .ex-level-mark { background: #66865d; }
 .ex-slider-thumb:focus-visible { outline: 2px solid #45634e; outline-offset: 2px; }
-.ex-catch-machine { --claw-height: clamp(34px, 25cqw, 50px); position: relative; width: calc(100% - 36px); flex: 1; border-top: 4px solid #3d574333; border-bottom: 2px solid #3d574329; min-height: 0; }
+.ex-catch-machine { --claw-height: clamp(34px, 25cqw, 50px); position: relative; width: 100%; flex: 1; border-top: 4px solid #3d574333; border-bottom: 2px solid #3d574329; min-height: 0; }
 .ex-claw { top: 0; transform: translateX(-50%); width: var(--claw-height); height: var(--claw-height); background: transparent; }
+.ex-catch-travel { position: absolute; inset: 0 calc(var(--claw-height) * .4); }
 .ex-claw-rod{position:absolute;top:0;width:3px;height:8px;translate:-50% 0;background:linear-gradient(90deg,#657d6b,#f6f4d8 50%,#778c76);border-radius:2px;pointer-events:none}
 .ex-catch-prize { position: absolute; bottom: -1px; transform: translateX(-50%); font-size: clamp(23px, 17cqw, 33px); color: #b8737b; line-height: 1; transition: transform .2s, opacity .2s; }
 .ex-catch-prize.is-caught { opacity: 0; transform: translate(-50%, -15px); }
@@ -49,7 +50,7 @@
 .ex-upload-cloud { width: auto; height: 36%; aspect-ratio: 1; min-height: 0; flex-shrink: 1; }
 .ex-upload-meter { height: 11px; flex-shrink: 0; border-radius: 9px; width: 100%; overflow: hidden; background: #99716326; }
 .ex-upload-meter span { height: 100%; display: block; width: 0; background: #758d69; border-radius: inherit; transition: width .1s; }
-.ex-upload-controls { display: flex; width: 100%; flex: 1; min-height: 0; max-height: 44px; }
+.ex-upload-controls { display: flex; width: 100%; flex: 1; min-height: 0; }
 .ex-upload-controls .ex-key { width: 100%; font-size: 16px !important; }
 .ex-pipes { position: relative; width: 100%; height: 100%; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 9px; }
 .ex-pipe { background: #fffaf0b8; min-height: 0; border-radius: 6px; position: relative; }
@@ -79,12 +80,11 @@
   .ex-level-row { gap: 3px; }
   .ex-level-label { font-size: 11px; width: 16px; }
   .ex-level-track { margin: 0 11px; }
-  .ex-catch-machine { --claw-height: 30px; width: calc(100% - 30px); }
+  .ex-catch-machine { --claw-height: 30px; }
   .ex-catch-prize { font-size: 23px; }
   .ex-catch-controls { flex-basis: 28px; }
   .ex-drop { font-size: 11px !important; }
   .ex-upload-meter { height: 8px; }
-  .ex-upload-controls { max-height: 32px; }
   .ex-upload-controls .ex-key { font-size: 12px !important; }
   .ex-pipes { padding: 7px; gap: 3px; }
   .ex-pipe-graphic { inset: 2px; }

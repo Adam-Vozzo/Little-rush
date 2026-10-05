@@ -19,9 +19,9 @@
 .arc-bubble-piece { transition: opacity .24s; }
 .arc-bubble-piece.is-popped { opacity: 0; }
 .arc-bubble-piece.is-popped circle { transform: scale(1.25); transition: transform .24s ease-out; }
-.arc-jewels { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr); width: 100%; height: 0; min-height: 0; flex: 1; padding: 3px; background: #56627616; border: 1px solid #68738526; border-radius: 10px; }
+.arc-jewels { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr); width: 100%; height: 0; min-height: 0; flex: 1; gap: 3px; }
 .mg .arc-gem { background: #fff9e947; border: 1px solid #68738512; border-radius: 5px; min-width: 0; min-height: 0; padding: 1px; touch-action: none; transition: transform .18s cubic-bezier(.2,.75,.3,1), background .12s; position: relative; }
-.mg .arc-gem svg { width: 100%; height: 100%; max-width: none; filter: drop-shadow(0 1px 0 #31444228); }
+.mg .arc-gem svg { width: 100%; height: 100%; max-width: none; }
 .mg .arc-gem[aria-pressed=true] { background: #fffff6; box-shadow: inset 0 0 0 2px #74898c; z-index: 1; }
 .mg .arc-gem:active { transform: none; }
 .mg .arc-gem.is-teleport { transition: none; }
