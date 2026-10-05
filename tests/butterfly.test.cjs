@@ -635,18 +635,22 @@ test('Zen fills the real board, hides deadlines, counts clears and preserves tim
   assert.equal(env.engine.snapshot(3600500).tiles.filter(Boolean).length, 0);
 });
 
-test('Zen can fill a hatch-only board and keeps hatch/feed pools full through repeated completions', () => {
+test('Zen needs a repeatable game and never repeats the cocoon, even after hatching', () => {
   const env = environment({app: true, actualTiming: true, saved: {'little-rush-difficulty': 'zen'}});
   env.document.getElementById('tweaks-button').click(); env.action('all-off'); env.toggleGame('press', true);
-  assert.equal(env.document.getElementById('start-button').disabled, false);
-  env.toggleGame('feed', true); env.action('close'); env.document.getElementById('start-button').click();
+  assert.equal(env.document.getElementById('start-button').disabled, true);
+  env.toggleGame('feed', true);
+  assert.equal(env.document.getElementById('start-button').disabled, true);
+  env.toggleGame('switch', true); env.action('close'); env.document.getElementById('start-button').click();
   assert.equal(env.engine.snapshot(0).tiles.filter(Boolean).length, 8);
-  assert.ok(env.engine.snapshot(0).tiles.every(tile => tile.type === 'press'));
+  assert.equal(env.engine.snapshot(0).tiles.filter(tile => tile?.type === 'press').length, 1);
   env.advance(3000); env.complete('press'); env.advance(3500);
   assert.equal(env.habitat.active, true); assert.ok(env.engine.snapshot(3500).tiles.some(tile => tile.type === 'feed'));
   assert.equal(env.engine.snapshot(3500).tiles.filter(Boolean).length, 8);
-  env.complete('press'); env.advance(4000);
+  assert.equal(env.engine.snapshot(3500).tiles.filter(tile => tile?.type === 'press').length, 0);
+  env.complete('switch'); env.advance(4000);
   assert.equal(env.engine.snapshot(4000).tiles.filter(Boolean).length, 8);
+  assert.equal(env.engine.snapshot(4000).tiles.filter(tile => tile?.type === 'press').length, 0);
 });
 
 test('Tweaks games play with independent clocks, retain the completed pose, then mount fresh puzzles', () => {

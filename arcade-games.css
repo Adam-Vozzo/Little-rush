@@ -1,0 +1,42 @@
+/* Pocket arcade: generous controls, crisp pieces, quiet feedback. */
+.mg-arcade .mg-body { gap: 3px; }
+.mg-arcade svg { stroke: none; }
+.mg-arcade .arc-scene { flex: 1; width: 100%; height: 0; min-height: 0; overflow: hidden; border-radius: 9px; }
+.mg-arcade .arc-scene[tabindex] { pointer-events: auto; touch-action: none; cursor: grab; outline-offset: -2px; }
+.mg-arcade .arc-scene[tabindex]:active { cursor: grabbing; }
+.arc-caption { width: 100%; flex: 0 0 auto; min-height: 10px; text-align: center; font-size: clamp(6px, 4.1cqw, 9px); font-weight: 650; letter-spacing: .045em; line-height: 1.3; color: #506952; pointer-events: none; }
+.arc-controls { display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 5px; width: 100%; flex: 0 0 clamp(27px, 20cqw, 40px); }
+.mg .arc-controls button { background: #fffaf0d9; border: 1px solid #68816c28; border-radius: 9px; box-shadow: 0 2px 0 #526e4921; transition: background .1s, box-shadow .1s, opacity .15s; }
+.mg .arc-controls button:active, .mg .arc-controls button.is-held { background: #fafdf0; box-shadow: inset 0 1px 3px #526e492b; transform: none; }
+.mg .arc-controls button:disabled { opacity: .45; }
+.arc-arrow { font-size: clamp(17px, 13cqw, 25px) !important; line-height: 1; }
+.arc-fire { font-size: clamp(9px, 6.7cqw, 13px) !important; font-weight: 650 !important; letter-spacing: .04em; }
+.arc-guide { fill: none; stroke: #587568; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 1 8; opacity: .5; }
+.arc-barrel { fill: none; stroke: #53796c; stroke-width: 10; stroke-linecap: round; }
+.arc-bubble { stroke: #fff9; stroke-width: 1.4; }
+.arc-bubble-piece { transition: opacity .24s; }
+.arc-bubble-piece.is-popped { opacity: 0; }
+.arc-bubble-piece.is-popped circle { transform: scale(1.25); transition: transform .24s ease-out; }
+.arc-jewels { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr); width: 100%; height: 0; min-height: 0; flex: 1; padding: 3px; background: #56627616; border: 1px solid #68738526; border-radius: 10px; }
+.mg .arc-gem { background: #fff9e947; border: 1px solid #68738512; border-radius: 5px; min-width: 0; min-height: 0; padding: 1px; touch-action: none; transition: transform .18s cubic-bezier(.2,.75,.3,1), background .12s; position: relative; }
+.mg .arc-gem svg { width: 100%; height: 100%; max-width: none; filter: drop-shadow(0 1px 0 #31444228); }
+.mg .arc-gem[aria-pressed=true] { background: #fffff6; box-shadow: inset 0 0 0 2px #74898c; z-index: 1; }
+.mg .arc-gem:active { transform: none; }
+.mg .arc-gem.is-teleport { transition: none; }
+.arc-gem.is-cleared svg { animation: arc-gem-clear .42s ease-in forwards; }
+@keyframes arc-gem-clear { 0%,25% { scale: 1; opacity: 1; } 45% { scale: 1.13; } 100% { scale: .2; opacity: 0; } }
+.arc-peg circle { fill: #8da6aa; stroke: #fbf8ee; stroke-width: 1.5; }
+.arc-peg.is-marked circle { fill: #da9a3c; stroke: #fff3bb; stroke-width: 2.5; filter: drop-shadow(0 1px 1px #aa752e30); }
+.arc-peg.is-hit { opacity: .13; transition: opacity .28s; }
+.arc-svg-label { font: 600 7px system-ui, sans-serif; fill: #52706c; letter-spacing: .7px; }
+.arc-board-status { font: 650 10px system-ui, sans-serif; fill: #52725e; letter-spacing: .3px; }
+.arc-board-dice { display: flex; justify-content: center; gap: 12px; width: 100%; height: clamp(27px, 21cqw, 41px); flex: 0 0 clamp(27px, 21cqw, 41px); }
+.mg .arc-die { width: clamp(27px, 21cqw, 41px); height: clamp(27px, 21cqw, 41px); flex: 0 0 auto; border: 1px solid #a6b497; border-radius: 7px; background: #fffaf0; box-shadow: 0 2px 0 #b3bfa5; }
+.arc-die svg { padding: 2px; }
+.arc-die.is-rolling { animation: arc-die-toss .23s ease-out; }
+@keyframes arc-die-toss { 30% { translate: 0 -3px; rotate: -12deg; } 70% { rotate: 8deg; } }
+.arc-reward.is-won { filter: drop-shadow(0 0 5px #ffd482); }
+.arc-golf-guide { fill: none; stroke: #fff5bb; stroke-width: 2; stroke-dasharray: 3 4; stroke-linecap: round; }
+.arc-golf-ball.is-sunk { opacity: 0; transition: opacity .25s; }
+.mg-golf .arc-scene { cursor: crosshair; }
+@media (prefers-reduced-motion: reduce) { .arc-gem.is-cleared svg { opacity: .15; } }
