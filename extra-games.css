@@ -39,8 +39,8 @@
 .ex-level-row.is-matched .ex-level-mark { background: #66865d; }
 .ex-slider-thumb:focus-visible { outline: 2px solid #45634e; outline-offset: 2px; }
 .ex-catch-machine { --claw-height: clamp(34px, 25cqw, 50px); position: relative; width: calc(100% - 36px); flex: 1; border-top: 4px solid #3d574333; border-bottom: 2px solid #3d574329; min-height: 0; }
-.ex-claw { top: 0; transform: translateX(-50%); width: var(--claw-height); height: var(--claw-height); background: transparent; transition: top .25s; }
-.ex-claw.is-dropping { top: calc(100% - var(--claw-height) + 6px); }
+.ex-claw { top: 0; transform: translateX(-50%); width: var(--claw-height); height: var(--claw-height); background: transparent; }
+.ex-claw-rod{position:absolute;top:0;width:3px;height:8px;translate:-50% 0;background:linear-gradient(90deg,#657d6b,#f6f4d8 50%,#778c76);border-radius:2px;pointer-events:none}
 .ex-catch-prize { position: absolute; bottom: -1px; transform: translateX(-50%); font-size: clamp(23px, 17cqw, 33px); color: #b8737b; line-height: 1; transition: transform .2s, opacity .2s; }
 .ex-catch-prize.is-caught { opacity: 0; transform: translate(-50%, -15px); }
 .ex-catch-controls { display: flex; justify-content: center; flex: 0 0 36px; width: 100%; }
@@ -114,4 +114,18 @@
 .ex-match-window.is-matched{border-color:#567f48;background:#eef5e3}.ex-match-stop{flex:0 0 31%;width:100%}
 .ex-catch-controls{gap:5px;flex-basis:34px}.ex-catch-controls .ex-claw-arrow{width:28%;font-size:23px!important;font-weight:400!important}.ex-catch-controls .ex-drop{flex:1;width:auto;font-size:12px!important}
 .ex-claw svg{transform:rotate(var(--claw-swing,0deg));transform-origin:50% 8%}
+.ex-claw-arrow{touch-action:none}.ex-claw-arrow.is-held{background:#e5edda;box-shadow:inset 0 2px 3px #304d4220}
+.ex-catch-prize.is-held{transition:none}
+.mg-match{cursor:pointer}.mg-match.is-cooling .ex-match-stop{background:#fff9ec70;color:#7a6862;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 3px #55704c12}
+.ex-aim-field{position:relative;flex:1;min-height:0;width:100%;border-radius:12px;background:#fffaf035}
+.ex-aim-start{position:absolute;inset:0;margin:auto;width:65%;height:42%;border-radius:12px!important;box-shadow:inset 0 1px 0 #fff8,0 2px 0 #75564b18}
+.ex-aim-progress{display:flex;align-items:center;justify-content:center;gap:7px;flex:0 0 8px}
+.ex-aim-progress span{width:5px;height:5px;border-radius:50%;background:#9c797466;transition:background .1s}
+.ex-aim-progress .is-done{background:#568475}
+.mg .ex-aim-target{position:absolute;width:clamp(28px,22cqw,44px);aspect-ratio:1;border-radius:50%;background:#bf697223;box-shadow:inset 0 0 0 2px #b65364;touch-action:none;transition:background .07s,box-shadow .07s}
+.ex-aim-core{position:absolute;inset:30%;border-radius:50%;background:#b65364;pointer-events:none}
+.mg .ex-aim-target.is-ready{background:#b65364;box-shadow:inset 0 1px 0 #ffffff70,0 2px 4px #75474b25}
+.ex-aim-target.is-ready .ex-aim-core{background:#fff6e9;inset:39%}
+.mg .ex-aim-target.is-hit{opacity:0!important;scale:1.18;transition:opacity .13s,scale .13s;pointer-events:none}
+.mg .ex-aim-target:not(:disabled):active{transform:translate(-50%,-50%)}
 @media(prefers-reduced-motion:reduce){.ex-claw svg{transform:none}}

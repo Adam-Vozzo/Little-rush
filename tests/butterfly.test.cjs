@@ -170,14 +170,15 @@ test('a butterfly hatches once, freezes during pause and resumes from the same a
   assert.notEqual(habitat.position.x, position.x);
 });
 
-test('nectar drag crosses the board, holds butterfly still, and completes exactly once on a hit', () => {
+test('nectar drag follows a moving butterfly and completes exactly once at its current position', () => {
   const env = environment(); const { habitat } = env;
   habitat.hatch(7, 0); habitat.update(5000, true);
-  const feed = env.feed(); const position = { ...habitat.position };
+  const feed = env.feed(); let position = { ...habitat.position };
   feed.button.dispatch('pointerdown');
   assert.equal(env.body.querySelectorAll('.nectar-ghost').length, 1);
   habitat.update(8000, true);
-  assert.equal(habitat.position.x, position.x); assert.equal(habitat.position.y, position.y);
+  assert.notEqual(habitat.position.x, position.x); assert.notEqual(habitat.position.y, position.y);
+  position = { ...habitat.position };
   feed.button.dispatch('pointermove', { clientX: position.x, clientY: position.y });
   assert.equal(env.body.querySelector('.nectar-ghost').style.left, `${position.x}px`);
   feed.button.dispatch('pointerup', { clientX: position.x, clientY: position.y });

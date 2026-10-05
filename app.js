@@ -187,6 +187,7 @@
     requestAnimationFrame(frame);
   }
   function openDialog(kind, content) {
+    views.forEach(view => view.api.suspend?.());
     previews.splice(0).forEach(api => api.destroy());
     dialog.classList.toggle('tweaks-dialog', kind === 'tweaks');
     modalKind = kind; habitat.update(engine.snapshot(performance.now()).elapsedMs, false); board.setAttribute('inert', '');

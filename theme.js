@@ -267,6 +267,8 @@
     listen(document, 'animationend', event => { if (event.target.matches?.('.tile')) requestSync(); });
     const tilt = (tile, event) => {
       if (state.reduced || state.paused || !tile || tile.classList.contains('is-solved')) return;
+      // Keep direct manipulation in a stable plane; the foil still follows the pointer.
+      if (['shapes', 'maze', 'level', 'catch'].includes(tile.dataset.game)) return;
       const rect = tile.getBoundingClientRect();
       const x = clamp((event.clientX - rect.left) / rect.width, 0, 1) - .5;
       const y = clamp((event.clientY - rect.top) / rect.height, 0, 1) - .5;

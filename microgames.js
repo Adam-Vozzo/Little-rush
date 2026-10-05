@@ -286,12 +286,14 @@
           if (!started || watching) return;
           tapped = index;
           tapUntil = age + 160;
+          pads.forEach((item, i) => item.classList.toggle('is-lit', i === index));
           if (index !== pattern[inputIndex]) {
             error();
             inputIndex = 0;
             dots.update(0);
             replayStart = age + 500;
             watching = true;
+            start.textContent = '•••';
             hint.textContent = 'Watch once more';
           } else {
             feedback();
@@ -300,7 +302,8 @@
             if (inputIndex === pattern.length) finish();
           }
         });
-        pad.innerHTML = '<span></span>';
+        // Each pad is a real annular sector, including its inset highlight.
+        pad.innerHTML = svg('<path class="mg-simon-sector" d="M96 3A93 93 0 0 0 3 96H53A43 43 0 0 1 96 53Z" fill="currentColor"/><path class="mg-simon-rim" d="M96 3A93 93 0 0 0 3 96H53A43 43 0 0 1 96 53Z" stroke="white" stroke-width="2"/>');
         board.append(pad);
         return pad;
       });
@@ -330,14 +333,24 @@
       const meter = node('div', 'mg-stop-meter');
       meter.innerHTML = '<span class="mg-stop-zone"></span><span class="mg-stop-dot"></span>';
       const movingDot = meter.querySelector('.mg-stop-dot');
-      let position = demo ? 41 : 0;
+      let position = demo ? 41 : 0, retryAt = 0;
       const stop = button('mg-stop-button', 'Stop the moving dot inside the highlighted zone', () => {
+        if (age < retryAt) return;
         if (position >= 36 && position <= 64) {
           feedback();
           finish();
-        } else error();
+        } else {
+          retryAt = age + 750; stop.disabled = true; root.classList.add('is-cooling');
+          hint.textContent = 'Missed · try again in a moment'; error(); renderCooldown();
+        }
       });
       stop.innerHTML = '<span class="mg-stop-symbol" aria-hidden="true">■</span>';
+      const symbol = stop.querySelector('.mg-stop-symbol');
+      const renderCooldown = () => {
+        const cooling = age < retryAt;
+        stop.disabled = cooling; root.classList.toggle('is-cooling', cooling);
+        symbol.textContent = cooling ? ((retryAt - age) / 1000).toFixed(1) : '■';
+      };
       meterArea.append(meter);
       body.append(meterArea, stop);
       hint.textContent = 'Stop inside the green';
@@ -345,6 +358,7 @@
       tickers.push(() => {
         position = (Math.sin(age / 420 - Math.PI / 2) + 1) * 50;
         movingDot.style.left = `${position}%`;
+        renderCooldown();
       });
     } else if (type === 'hold') {
       let holding = false;
@@ -413,6 +427,10 @@
       let selected = null;
       let matched = 0;
       let drag = null;
+      const targetAt = (x, y) => targets.find(target => {
+        const rect = target.element.getBoundingClientRect();
+        return !target.element.disabled && x >= rect.left - 6 && x <= rect.right + 6 && y >= rect.top - 6 && y <= rect.bottom + 6;
+      });
       const pick = item => {
         if (item.element.disabled) return;
         if (selected) selected.element.classList.remove('is-selected');
@@ -464,23 +482,28 @@
           drag = { item, pointer: event.pointerId, x: event.clientX, y: event.clientY };
           shape.setPointerCapture(event.pointerId);
           shape.classList.add('is-dragging');
+          feedback();
         });
         listen(shape, 'pointermove', event => {
           if (!drag || drag.item !== item || drag.pointer !== event.pointerId) return;
           shape.style.transform = `translate(${event.clientX - drag.x}px, ${event.clientY - drag.y}px)`;
+          const hovered = targetAt(event.clientX, event.clientY);
+          targets.forEach(target => target.element.classList.toggle('is-hovered', target === hovered && target.name === name));
         });
         const release = (event, cancelled) => {
           if (!drag || drag.item !== item || drag.pointer !== event.pointerId) return;
           drag = null;
           ignoreClick = true;
+          const droppedTransform = shape.style.transform;
           shape.style.transform = '';
           shape.classList.remove('is-dragging');
+          targets.forEach(target => target.element.classList.remove('is-hovered'));
+          if (shape.hasPointerCapture?.(event.pointerId)) shape.releasePointerCapture(event.pointerId);
           if (cancelled) return;
-          const target = targets.find(item => {
-            const rect = item.element.getBoundingClientRect();
-            return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
-          });
-          if (target) place(target);
+          const target = targetAt(event.clientX, event.clientY);
+          // Fade the source at the drop point rather than animating it home
+          // underneath the newly filled outline.
+          if (target && place(target)) shape.style.transform = droppedTransform;
         };
         listen(shape, 'pointerup', event => release(event, false));
         listen(shape, 'pointercancel', event => release(event, true));

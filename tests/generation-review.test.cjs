@@ -196,10 +196,15 @@ test('independent review: diagonal corner cuts and re-grabbing another cell cann
     assert.equal(g.current(), g.maze.start);
     g.grid.fire('pointerdown', g.at(g.maze.start));
     g.grid.fire('pointermove', g.at(diagonal));
-    assert.notEqual(g.current(), diagonal);
-    if(g.current()!==g.maze.start){
-      const side=[[0,-1],[1,0],[0,1],[-1,0]].findIndex(([dx,dy])=>g.maze.start%g.maze.width+dx===g.current()%g.maze.width&&Math.floor(g.maze.start/g.maze.width)+dy===Math.floor(g.current()/g.maze.width));
-      assert.ok(side>=0 && (g.maze.cells[g.maze.start] & (1<<side)));
+    // Wall sliding may round an open corner, but every intermediate cell must
+    // be connected in both directions; there is never a diagonal teleport.
+    const slide = puzzles.slideMazeSegment(g.maze, g.maze.start, [x + .5, y + .5], [diagonal % g.maze.width + .5, Math.floor(diagonal / g.maze.width) + .5]);
+    assert.equal(g.current(), slide.cell);
+    let previous = g.maze.start;
+    for (const next of slide.visited) {
+      const side=[[0,-1],[1,0],[0,1],[-1,0]].findIndex(([dx,dy])=>previous%g.maze.width+dx===next%g.maze.width&&Math.floor(previous/g.maze.width)+dy===Math.floor(next/g.maze.width));
+      assert.ok(side>=0 && (g.maze.cells[previous] & (1<<side)) && (g.maze.cells[next] & (1<<((side+2)%4))));
+      previous = next;
     }
     assert.equal(g.grid.captured, 1);
     assert.equal(g.completions, 0);
@@ -413,12 +418,12 @@ test('independent review: 100 catch games require dragging then dropping, never 
     rail.fire('pointerdown', { clientX: target * 1.2 }); rail.fire('pointerup');
     handle.fire('pointerdown', { clientX: target * 1.2 }); handle.fire('pointerup');
     assert.equal(Number(handle.getAttribute('aria-valuenow')), initial);
-    drop.fire('click'); g.tick(350);
+    drop.fire('click'); g.tick(1450);
     assert.equal(g.completions, 0);
     moveSlider(handle, target);
-    drop.fire('click'); g.tick(699);
+    drop.fire('click'); g.tick(2899);
     assert.equal(g.completions, 0);
-    g.tick(700);
+    g.tick(2900);
     assert.equal(g.completions, 1, `Catch drag rejected for seed ${seed}`);
     g.destroy();
   }
