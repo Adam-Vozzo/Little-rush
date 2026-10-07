@@ -1,6 +1,6 @@
 # Little Rush
 
-A mobile-first collection of 29 playable micro-games, built with HTML, CSS and JavaScript. Version 0.12.0 adds an optional Three.js Aero style, unique active games, larger peg targets and shooting controls, compact phone margins, drag-location rings, and shorter gift boards. All assets, including the MIT-licensed Three.js bundle, ship locally; no account or network connection is required to play.
+A mobile-first collection of 29 playable micro-games, built with HTML, CSS and JavaScript. Version 0.12.1 fixes Aero tiles flashing on interaction by retiring their entrance animation before touch feedback begins. It retains the Three.js Aero style, unique active games, larger peg targets and shooting controls, compact phone margins, drag-location rings, and shorter gift boards. All assets, including the MIT-licensed Three.js bundle, ship locally; no account or network connection is required to play.
 
 ## Play
 
