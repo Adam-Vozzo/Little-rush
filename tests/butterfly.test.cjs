@@ -341,6 +341,23 @@ test('filled pie countdown and microgame age use the same 25-second lifetime wit
   assert.equal(fill.getAttribute('d'), '');
 });
 
+test('tile entrances retire after landing and are not restored by later game updates', () => {
+  for (const animationName of ['tile-in', 'foil-land']) {
+    const env=environment({app:true});
+    env.document.getElementById('start-button').click();
+    const tile=env.board.querySelector('.new-tile');
+    env.board.dispatch('animationend',{target:tile.querySelector('.microgame'),animationName});
+    env.board.dispatch('animationend',{target:tile,animationName:'aero-settle'});
+    assert.equal(tile.classList.contains('new-tile'),true,'Child and completion effects do not finish the entrance');
+    env.board.dispatch('animationend',{target:tile,animationName});
+    assert.equal(tile.classList.contains('new-tile'),false);
+    env.advance(1000);
+    assert.equal(tile.classList.contains('new-tile'),false,'Normal rendering must not replay the entrance');
+    env.advance(2500);
+    assert.equal(env.board.querySelectorAll('.new-tile').length,1,'The next spawned game still gets an entrance');
+  }
+});
+
 test('geode reveal reserves its slot for 880ms and cannot expire', () => {
   const env = environment({app: true});
   env.document.getElementById('start-button').click();

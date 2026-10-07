@@ -1,6 +1,6 @@
 {
   "name": "little-rush",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "private": true,
   "description": "A mobile-first collection of fast-paced micro-games.",
   "scripts": {

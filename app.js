@@ -127,6 +127,9 @@
     cell.setAttribute('aria-label', `Empty slot ${slot + 1}`); cell.innerHTML = '<span class="empty-mark" aria-hidden="true">+</span>'; cell.dataset.view = 'empty';
   }
   for (let slot = 0; slot < 8; slot++) { const cell = document.createElement('section'); board.append(cell); cells.push(cell); emptyCell(cell, slot); }
+  board.addEventListener('animationend', event => {
+    if (event.target.parentElement === board && ['tile-in', 'foil-land'].includes(event.animationName)) event.target.classList.remove('new-tile');
+  });
   function mountTile(cell, game, tile) {
     cell.className = `tile ${game.color} new-tile`; cell.dataset.game = game.id; cell.dataset.view = tile.id; cell.dataset.tileId = tile.id;
     cell.setAttribute('aria-label', `${game.title} micro-game`);

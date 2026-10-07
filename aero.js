@@ -118,7 +118,15 @@
       s.resize=new ResizeObserver(refresh);s.resize.observe(document.body);
       listen(window,'resize',refresh,{passive:true});listen(document,'scroll',refresh,{passive:true,capture:true});listen(document,'visibilitychange',refresh);
       const track=(tile,e,touch)=>{touch.x=clamp((e.clientX-touch.rect.left)/touch.rect.width,0,1)*2-1;touch.y=clamp((e.clientY-touch.rect.top)/touch.rect.height,0,1)*2-1;tile.style.setProperty('--aero-x',`${(touch.x+1)*50}%`);tile.style.setProperty('--aero-y',`${(touch.y+1)*50}%`);if(!['maze','level','shapes','jewels','golf','telescope','pegs','bubbles','sign'].includes(tile.dataset.game)){tile.style.setProperty('--aero-rx',`${-touch.y*2.5}deg`);tile.style.setProperty('--aero-ry',`${touch.x*2.5}deg`);}};
-      listen(document,'pointerdown',e=>{const tile=e.target.closest?.('.tile:not(.empty),.home-art');if(!tile||s.reduced||paused()||s.held.has(tile))return;const touch={id:e.pointerId,rect:tile.getBoundingClientRect(),x:0,y:0};s.held.set(tile,touch);tile.classList.add('aero-touch');track(tile,e,touch);request();},{passive:true,capture:true});
+      listen(document,'pointerdown',e=>{
+        const tile=e.target.closest?.('.tile:not(.empty),.home-art');
+        if(!tile||s.reduced||paused()||s.held.has(tile))return;
+        // Retire the entrance before touch styling cancels it. Otherwise release
+        // restores .new-tile's animation and fades the entire tile in again.
+        tile.classList.remove('new-tile');
+        const touch={id:e.pointerId,rect:tile.getBoundingClientRect(),x:0,y:0};
+        s.held.set(tile,touch);tile.classList.add('aero-touch');track(tile,e,touch);request();
+      },{passive:true,capture:true});
       listen(document,'pointermove',e=>{for(const[tile,touch]of s.held)if(touch.id===e.pointerId)track(tile,e,touch);},{passive:true,capture:true});
       for(const type of ['pointerup','pointercancel','lostpointercapture'])listen(document,type,e=>release(e.pointerId),{passive:true,capture:true});listen(window,'blur',()=>release());
       const motionChanged=e=>{s.reduced=e.matches;release();cancelFrame();refresh();};listen(motion,'change',motionChanged);
